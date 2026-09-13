@@ -49,6 +49,7 @@ function ValveDetailScreen() {
   const [building, setBuilding] = useState<Building | null>(null);
   const [unit, setUnit] = useState<Unit | null>(null);
   const [valve, setValve] = useState<Valve | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [gateway, setGateway] = useState<Gateway | undefined>(undefined);
   const [commands, setCommands] = useState<CommandLog[]>([]);
   const [inFlight, setInFlight] = useState<CommandLog | undefined>(undefined);
@@ -89,7 +90,16 @@ function ValveDetailScreen() {
 
   async function sendCommand(v: Valve, action: CommandAction) {
     if (!user) return undefined;
-    return api.valves.queueCommand(v.id, action);
+    try {
+      setNotice(null);
+      return await api.valves.queueCommand(v.id, action);
+    } catch (err) {
+      // The server refuses a second command on a busy valve. Without this
+      // the rejection was unhandled and the operator saw nothing at all.
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(null), 6000);
+      return undefined;
+    }
   }
 
   const fmt = (iso: string | null) =>
@@ -130,6 +140,12 @@ function ValveDetailScreen() {
           </button>
         )}
       </div>
+
+      {notice && (
+        <div className="rounded-lg border border-warn/40 bg-warn/10 px-4 py-2.5 text-sm text-ink-2">
+          {notice}
+        </div>
+      )}
 
       <Card>
         <ul className="divide-y divide-hairline">

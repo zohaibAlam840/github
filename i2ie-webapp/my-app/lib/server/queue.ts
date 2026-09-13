@@ -15,7 +15,7 @@
 import type { Repo } from "./repo";
 import { broadcast } from "./events";
 import type { Command, CommandAction, CommandStatus, PingResult, Valve, ValveStatus } from "../types";
-import { describeWorkerError } from "../workerStatus";
+import { DEFAULT_WORKER_URL, describeWorkerError } from "../workerStatus";
 
 /**
  * The worker answered and refused. Distinct from a network error, because
@@ -23,6 +23,18 @@ import { describeWorkerError } from "../workerStatus";
  * plugged in" versus "the worker process is not running".
  */
 class WorkerRejected extends Error {}
+
+/**
+ * Thrown when a valve already has a command in flight.
+ *
+ * The bulk path skipped busy valves, but the single-valve path did not — so
+ * a second command overwrote valves.pending_command_id and ORPHANED the
+ * first, which then sat "Pending" until its ceiling with nothing able to
+ * clear it. The buttons are disabled while pending, but that is a UI
+ * courtesy, not a guarantee: the API is reachable directly, and two tabs
+ * can race.
+ */
+export class CommandInFlight extends Error {}
 
 const REPLY_MIN_MS = 900;
 const REPLY_MAX_MS = 3200;
@@ -89,6 +101,11 @@ export function createQueueEngine(repo: Repo) {
   function queueCommand(valveId: number, action: CommandAction, userId: number, userName: string): Command {
     const valve = repo.getValve(valveId);
     if (!valve) throw new Error("Valve not found");
+    if (valve.pendingCommandId !== null) {
+      throw new CommandInFlight(
+        `${valve.valveCode} is already waiting on a command. Let it finish, or press Stop on it first.`
+      );
+    }
     const gateway = repo.getGateway(valve.gatewayId);
     const settings = repo.getSettings();
 
@@ -127,6 +144,66 @@ export function createQueueEngine(repo: Repo) {
     });
   }
 
+  /**
+   * Stop waiting on a command.
+   *
+   * It is important to be precise about what this does and does not do. A
+   * command still queued has not been sent, so cancelling it is complete.
+   * One already dispatched HAS left the modem — GSM has no recall — so all
+   * we can honestly do is stop waiting for the reply and say so. The status
+   * is "cancelled", never "failed", because the valve may well have acted.
+   *
+   * The poll loop needs no signal: it re-reads the command each tick and
+   * exits on any status other than "sent", so this write ends it.
+   */
+  function cancelCommand(commandId: number, userName: string): Command | null {
+    const command = repo.getCommand(commandId);
+    if (!command) return null;
+    if (command.status !== "pending" && command.status !== "sent") return command;
+
+    /*
+     * Whether the SMS actually left is the command's own status, NOT whether
+     * it is still in the pending array. processQueue() shifts an id off that
+     * array the moment it starts working on it, so a command mid-dispatch
+     * reads as "not queued" and we would tell the operator an SMS had gone
+     * out when none had. Status "sent" is set immediately before the send.
+     */
+    const alreadySent = command.status === "sent";
+    const queuedIndex = pending.indexOf(commandId);
+    if (queuedIndex !== -1) pending.splice(queuedIndex, 1);
+
+    const events = [
+      ...(command.events ?? []),
+      {
+        ts: now(),
+        message: alreadySent
+          ? `Stopped by ${userName}. The SMS had already been sent, so the valve may still act; ` +
+            `we simply stopped waiting for the reply. Press Check status now to find out.`
+          : `Cancelled by ${userName} before it was sent — no SMS went out.`,
+      },
+    ];
+
+    repo.updateCommand(commandId, { status: "cancelled", events });
+    const valve = repo.getValve(command.valveId);
+    if (valve) {
+      finishValvePending(valve);
+      // A dispatched command leaves the valve's real state genuinely unknown.
+      if (alreadySent && command.action !== "status") {
+        repo.setValveStatus(valve.id, valve.lastStatus, true, false);
+      }
+      broadcast("valve:update", {
+        valve: { ...valve, statusVerified: false, pendingCommandId: null },
+        source: "timeout",
+      });
+      logActivity("cancelled", valve, userName, command.action, null);
+    }
+
+    const updated = { ...command, status: "cancelled" as CommandStatus, events };
+    emitCommand(updated);
+    emitQueueState();
+    return updated;
+  }
+
   /* ---------- the lane ---------- */
 
   async function processQueue() {
@@ -151,11 +228,21 @@ export function createQueueEngine(repo: Repo) {
     if (!valve) return;
 
     const settings = repo.getSettings();
-    if (settings.workerUrl) {
-      await processOneReal(command, valve, settings.workerUrl, settings.confirmAfterCommand);
+    /*
+     * Simulation happens ONLY when someone asked for it.
+     *
+     * This used to read "if (settings.workerUrl)", so a blank address chose
+     * the simulator — the dashboard invented successes and no SMS left the
+     * building. Now an unset address falls back to where the worker actually
+     * listens, and if nothing is there the command FAILS and says so. An
+     * honest error beats a fabricated success on a system controlling real
+     * valves.
+     */
+    if (settings.demoMode) {
+      await processOneSimulated(command, valve, settings.maxRetries, settings.replyTimeoutMs, settings.confirmAfterCommand);
       return;
     }
-    await processOneSimulated(command, valve, settings.maxRetries, settings.replyTimeoutMs, settings.confirmAfterCommand);
+    await processOneReal(command, valve, settings.workerUrl ?? DEFAULT_WORKER_URL, settings.confirmAfterCommand);
   }
 
   async function processOneSimulated(
@@ -454,7 +541,9 @@ export function createQueueEngine(repo: Repo) {
     if (!gateway) return { gatewayId, ok: false, replyText: null, roundTripMs: null };
 
     const settings = repo.getSettings();
-    if (settings.workerUrl) return pingGatewayReal(gateway.id, gateway.simNumber, gateway.authPassword, settings.workerUrl);
+    if (!settings.demoMode) {
+      return pingGatewayReal(gateway.id, gateway.simNumber, gateway.authPassword, settings.workerUrl ?? DEFAULT_WORKER_URL);
+    }
 
     const started = Date.now();
     await sleep(rand(1500, 3200));
@@ -563,7 +652,7 @@ export function createQueueEngine(repo: Repo) {
     }
   }
 
-  return { queueCommand, queueBulkCommand, pingGateway, resumeOnStartup };
+  return { queueCommand, queueBulkCommand, cancelCommand, pingGateway, resumeOnStartup };
 }
 
 export type QueueEngine = ReturnType<typeof createQueueEngine>;

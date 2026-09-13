@@ -12,6 +12,7 @@ import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { randomUUID, scryptSync, randomBytes } from "node:crypto";
 import type { Settings } from "../types";
+import { DEFAULT_WORKER_URL } from "../workerStatus";
 
 export const DEFAULT_SETTINGS: Settings = {
   // The keywords actually proven against a TRB141 — and the same defaults the
@@ -60,7 +61,20 @@ export const DEFAULT_SETTINGS: Settings = {
    * The honest failure (worker offline, said plainly) beats the dishonest
    * success it replaces.
    */
-  workerUrl: "http://localhost:3900",
+  workerUrl: DEFAULT_WORKER_URL,
+  /*
+   * Simulation is now opt-in, and off.
+   *
+   * It used to be selected by ACCIDENT — a null workerUrl silently switched
+   * the queue to random outcomes and green ticks with no SMS sent. On a
+   * system controlling real valves that is the most dangerous default
+   * available, because the failure looks exactly like success.
+   *
+   * With this off, an unreachable worker produces an honest error naming the
+   * address it tried. Turn it on deliberately to demo the dashboard with no
+   * hardware attached; every event it produces is prefixed [DEMO].
+   */
+  demoMode: false,
 };
 
 export function hashPassword(password: string): string {

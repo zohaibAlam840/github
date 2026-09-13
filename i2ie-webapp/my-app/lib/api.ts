@@ -205,6 +205,8 @@ export const api = {
   commands: {
     /** GET /api/commands?limit= — joined log rows, newest first. */
     list: (limit = 100) => get<CommandLog[]>(`/api/commands?limit=${limit}`),
+    /** POST /api/commands/:id/cancel — stop waiting; the SMS may already be gone. */
+    cancel: (id: number) => post<Command>(`/api/commands/${id}/cancel`, {}),
   },
 
   system: {

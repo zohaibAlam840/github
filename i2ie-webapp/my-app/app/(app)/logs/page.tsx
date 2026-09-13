@@ -26,6 +26,7 @@ const STATUSES: CommandStatus[] = [
   "failed",
   "no_response",
   "unconfirmed",
+  "cancelled",
 ];
 
 export default function LogsPage() {

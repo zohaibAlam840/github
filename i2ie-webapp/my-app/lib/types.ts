@@ -22,7 +22,8 @@ export type CommandStatus =
   | "success" // matching reply received and parsed
   | "failed" // send error after all retries
   | "no_response" // no reply within the timeout
-  | "unconfirmed"; // Settings.confirmAfterCommand was off — sent, never checked
+  | "unconfirmed" // Settings.confirmAfterCommand was off — sent, never checked
+  | "cancelled"; // an operator stopped waiting. The SMS may still have gone out.
 
 export interface User {
   id: number;
@@ -152,6 +153,7 @@ export type ActivityKind =
   | "timeout" // no reply within the timeout
   | "failed" // send failed after retries
   | "unconfirmed" // sent with confirmation intentionally skipped
+  | "cancelled" // an operator stopped waiting on a command
   | "ping"; // gateway reachability check
 
 export interface ActivityEvent {
@@ -213,8 +215,15 @@ export interface Settings {
   // When set, commands are sent for REAL via the local sms-worker process
   // (http://localhost:3900 by default) instead of the simulated engine —
   // the "run everything locally, no Supabase yet" bench-testing path.
-  // Leave null to keep the simulated timing/randomness for UI demos.
+  // Null now falls back to the worker's default address rather than
+  // silently simulating — see demoMode.
   workerUrl: string | null;
+
+  // Simulate every command instead of sending it: random outcomes, random
+  // timing, no SMS. Opt-in and off by default, because it used to be
+  // selected accidentally by a null workerUrl and is indistinguishable from
+  // real success unless you read the [DEMO] prefix on every event.
+  demoMode: boolean;
 }
 
 /**

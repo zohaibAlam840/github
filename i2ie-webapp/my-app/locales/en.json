@@ -68,12 +68,16 @@
     "no_response": "No response",
     "unconfirmed": "Sent (unconfirmed)",
     "ok": "Reachable",
-    "unreachable": "Unreachable"
+    "unreachable": "Unreachable",
+    "cancelled": "Stopped"
   },
   "action": {
     "status": "Check status",
     "on": "Turn ON",
-    "off": "Turn OFF"
+    "off": "Turn OFF",
+    "checkStatus": "Check status now",
+    "stop": "Stop",
+    "stopHint": "Stops waiting for the reply. If the SMS already went out the valve may still act — check the status afterwards."
   },
   "dashboard": {
     "title": "Dashboard",
@@ -99,7 +103,8 @@
     "push": "{{valve}} reported {{status}} on its own · {{building}}",
     "timeout": "{{valve}} did not respond — status unknown · {{building}}",
     "failed": "Sending to {{valve}} failed after retries · {{building}}",
-    "ping": "Gateway reachability check completed"
+    "ping": "Gateway reachability check completed",
+    "cancelled": "{{user}} stopped a command on {{valve}}"
   },
   "topbar": {
     "queue": "Queue",
@@ -258,7 +263,11 @@
     "resetAllData": "Clear all data",
     "resetting": "Clearing…",
     "resetConfirm": "This permanently deletes every building, unit, valve, gateway and command. This cannot be undone. Continue?",
-    "modemMoved": "The office modem now has its own screen, with live status, the port scan, Rescan and Test SMS."
+    "modemMoved": "The office modem now has its own screen, with live status, the port scan, Rescan and Test SMS.",
+    "demoSection": "Demonstration mode",
+    "demoHint": "Simulates every command instead of sending it — random outcomes, random timing, no SMS. For showing the dashboard with no hardware attached. Leave this OFF on a system controlling real valves.",
+    "demoToggle": "Simulate commands instead of sending them",
+    "demoWarning": "Simulation is ON. No SMS is being sent, and every result you see is invented. Events are prefixed [DEMO]."
   },
   "guide": {
     "intro": "Everything a technician needs to configure a TRB141 gateway so it works with this dashboard — written from what's actually been bench-confirmed on real hardware, not just the Teltonika docs. Anything not yet verified is flagged as such.",
@@ -392,6 +401,14 @@
     "workerSection": "Worker connection",
     "workerHint": "The dashboard does not talk to the modem directly. It talks to the worker program running on this PC, and the worker owns the COM port. If this address is blank or wrong, every screen falls back to demo data and no SMS is ever sent.",
     "workerSave": "Save address",
-    "workerUnset": "Not set — ask an admin to set the worker address."
+    "workerUnset": "Not set — ask an admin to set the worker address.",
+    "notSaved": "NOT SAVED — no worker address is stored, so every command is simulated and no SMS is sent. Press Save address.",
+    "savedUnreachable": "Saved as {{url}}, but nothing is answering there. Start the worker (npm run worker) on this PC.",
+    "connected": "Connected to the worker at {{url}} — commands send real SMS.",
+    "checking": "Checking the worker…",
+    "keywordsSection": "What gets sent",
+    "keywordsHint": "The exact SMS text each button sends. These must match the SMS Utilities rules configured on the TRB141 — if they do not, the device matches no rule and simply never replies, which looks exactly like a dead gateway.",
+    "keywordMismatch": "The worker's own default for this is \"{{theirs}}\". The dashboard value above is what actually gets sent — check it matches the rule on the device.",
+    "keywordsEdit": "Change these in Settings → SMS keywords."
   }
 }

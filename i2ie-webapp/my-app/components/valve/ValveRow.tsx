@@ -99,6 +99,7 @@ export function ValveRow({
   const pending = valve.pendingCommandId !== null;
   const [busy, setBusy] = useState(false);
   const [modalCommand, setModalCommand] = useState<Command | null>(null);
+  const [stopping, setStopping] = useState(false);
 
   // Keep the modal's command live while it's open — command:update fires on
   // every step (send accepted, each worker poll tick, final reply/timeout).
@@ -205,7 +206,7 @@ export function ValveRow({
               onClick={() => act("status")}
             >
               <IconSend size={13} className="text-brand" />
-              {t("buildings.refresh")}
+              {t("action.checkStatus")}
             </Button>
           </>
         )}
@@ -233,6 +234,37 @@ export function ValveRow({
         >
           <div className="space-y-4">
             <ProgressCircle status={modalCommand.status} />
+
+            {/*
+              Closing this modal already leaves the command running in the
+              background — the queue is server-side. Stop is the different
+              thing: it gives up on the reply. Only offered while there is
+              something to stop.
+            */}
+            {(modalCommand.status === "pending" || modalCommand.status === "sent") && (
+              <div className="flex flex-col items-center gap-1">
+                <Button
+                  variant="ghost"
+                  className="!px-3 !py-1.5 !text-xs"
+                  disabled={stopping}
+                  onClick={async () => {
+                    setStopping(true);
+                    try {
+                      setModalCommand(await api.commands.cancel(modalCommand.id));
+                      onChanged();
+                    } finally {
+                      setStopping(false);
+                    }
+                  }}
+                >
+                  {stopping ? <IconSpinner size={13} /> : <IconX size={13} />}
+                  {t("action.stop")}
+                </Button>
+                <span className="text-center text-[11px] leading-relaxed text-ink-3">
+                  {t("action.stopHint")}
+                </span>
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <span className="text-xs text-ink-3">

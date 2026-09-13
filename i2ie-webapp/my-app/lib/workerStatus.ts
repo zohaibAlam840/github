@@ -6,6 +6,16 @@
  * See sms-worker/src/transports/supervisor.ts for where these states come from.
  */
 
+/**
+ * Where the worker listens by default.
+ *
+ * The worker binds CONTROL_PORT (default 3900) or exits with EADDRINUSE — it
+ * never silently falls back to another port — so this address is correct on
+ * every default install. Keep it in step with controlPort in
+ * sms-worker/src/config.ts.
+ */
+export const DEFAULT_WORKER_URL = "http://localhost:3900";
+
 /** Mirrors ModemState in sms-worker/src/transports/health.ts. */
 export type ModemState =
   | "absent"

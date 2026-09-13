@@ -163,6 +163,7 @@ function FeedRow({ event, locale }: { event: ActivityEvent; locale: string }) {
     push: <IconRadio size={14} className="text-brand" />,
     timeout: <IconClock size={14} className="text-serious" />,
     failed: <IconX size={14} className="text-critical" />,
+    cancelled: <IconX size={14} className="text-ink-3" />,
     ping: <IconRadio size={14} className="text-ink-3" />,
   } as const;
 

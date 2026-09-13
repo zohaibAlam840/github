@@ -187,6 +187,26 @@ function SettingsScreen() {
         </label>
       </Card>
 
+      {/* Simulation — opt-in, and loudly labelled when on. */}
+      <Card className="border-warn/30 p-5">
+        <h2 className="text-sm font-semibold text-ink">{t("settings.demoSection")}</h2>
+        <p className="mb-4 mt-1 text-xs leading-relaxed text-ink-3">
+          {t("settings.demoHint")}
+        </p>
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-ink-2">
+          <input
+            type="checkbox"
+            checked={settings.demoMode}
+            onChange={(e) => patch("demoMode", e.target.checked)}
+            className="h-4 w-4 accent-brand"
+          />
+          {t("settings.demoToggle")}
+        </label>
+        {settings.demoMode && (
+          <p className="mt-2 text-xs font-medium text-warn">{t("settings.demoWarning")}</p>
+        )}
+      </Card>
+
       {/* Local worker bridge — bypasses Supabase for bench testing today */}
       <Card className="p-5">
         <h2 className="text-sm font-semibold text-ink">{t("settings.workerSection")}</h2>

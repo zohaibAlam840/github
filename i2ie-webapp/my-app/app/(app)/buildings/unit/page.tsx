@@ -92,10 +92,19 @@ function UnitDetailScreen() {
 
   async function sendCommand(valve: Valve, action: CommandAction) {
     if (!user) return undefined;
-    const command = await api.valves.queueCommand(valve.id, action);
-    setNotice(t("buildings.commandQueued"));
-    setTimeout(() => setNotice(null), 3500);
-    return command;
+    try {
+      const command = await api.valves.queueCommand(valve.id, action);
+      setNotice(t("buildings.commandQueued"));
+      setTimeout(() => setNotice(null), 3500);
+      return command;
+    } catch (err) {
+      // The server refuses a second command on a busy valve. Saying so is
+      // the whole point — an unhandled rejection told the operator nothing
+      // and left them clicking.
+      setNotice(err instanceof Error ? err.message : String(err));
+      setTimeout(() => setNotice(null), 6000);
+      return undefined;
+    }
   }
 
   if (!building || !unit) return null;

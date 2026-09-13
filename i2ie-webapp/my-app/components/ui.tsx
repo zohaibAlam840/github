@@ -115,6 +115,10 @@ function chipParts(status: ValveStatus | CommandStatus | GatewayReachability | "
       return { color: "text-critical", icon: <IconX size={13} /> };
     case "no_response":
       return { color: "text-serious", icon: <IconClock size={13} /> };
+    case "cancelled":
+      // Not red: nothing failed. An operator chose to stop waiting, and the
+      // valve may well have acted on the SMS that already went out.
+      return { color: "text-ink-3", icon: <IconX size={13} /> };
   }
 }
 

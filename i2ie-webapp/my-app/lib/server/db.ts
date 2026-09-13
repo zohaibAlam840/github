@@ -188,8 +188,52 @@ export function openDb(path: string): DatabaseSync {
 
   addMissingColumns(db);
   renameOpenClosedToOnOff(db);
+  upgradeLegacyKeywords(db);
   seedIfEmpty(db);
   return db;
+}
+
+/**
+ * Replaces the ORIGINAL default keywords with the ones proven against the
+ * client's TRB141.
+ *
+ * getSettings() merges stored values OVER the defaults — correct, since an
+ * admin's choice must survive a code update — but it meant a database seeded
+ * before the defaults were corrected kept sending "status" and "v1on"
+ * forever. That fails in the worst possible way: the device matches no rule,
+ * so it never replies, which is indistinguishable from a dead gateway.
+ *
+ * Only values that are EXACTLY the old defaults are touched. Anything an
+ * operator actually chose — including a deliberate "status", which is a real
+ * TRB141 factory rule — is left alone, because silently rewriting a
+ * configured keyword would be a worse bug than the one being fixed.
+ *
+ * Idempotent: after the first run no old values remain to match.
+ */
+function upgradeLegacyKeywords(db: DatabaseSync) {
+  const row = db.prepare("SELECT data_json FROM settings WHERE id = 1").get() as
+    | { data_json: string }
+    | undefined;
+  if (!row) return;
+
+  const stored = JSON.parse(row.data_json) as Record<string, unknown>;
+  const legacy: Record<string, [string, string]> = {
+    keywordOpen: ["v{output}on", DEFAULT_SETTINGS.keywordOpen],
+    keywordClose: ["v{output}off", DEFAULT_SETTINGS.keywordClose],
+    keywordStatus: ["status", DEFAULT_SETTINGS.keywordStatus],
+  };
+
+  const changed: string[] = [];
+  for (const [key, [old, replacement]] of Object.entries(legacy)) {
+    if (stored[key] === old) {
+      stored[key] = replacement;
+      changed.push(`${key}: "${old}" -> "${replacement}"`);
+    }
+  }
+  if (changed.length === 0) return;
+
+  db.prepare("UPDATE settings SET data_json = ? WHERE id = 1").run(JSON.stringify(stored));
+  console.warn(`[db] Upgraded legacy SMS keywords — ${changed.join(", ")}`);
 }
 
 /**

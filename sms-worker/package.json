@@ -5,8 +5,8 @@
   "description": "Office-side worker for the i2i CMS. Owns the SIM7600 modem on a COM port and exposes it to the local dashboard over HTTP; sends and receives the SMS that drive the TRB141 field gateways. Runs entirely offline.",
   "type": "module",
   "scripts": {
-    "worker": "tsx --env-file=.env src/index.ts",
-    "test-command": "tsx --env-file=.env src/testCommand.ts",
+    "worker": "tsx --env-file-if-exists=.env src/index.ts",
+    "test-command": "tsx --env-file-if-exists=.env src/testCommand.ts",
     "diagnose": "tsx src/diagnose.ts",
     "selftest": "tsx src/selftest.ts"
   },

@@ -20,7 +20,8 @@ assumed. Every claim below has the raw AT output behind it in
 | SIM, radio, network registration | **Proven** |
 | Outgoing SMS | **Proven to delivery** — `+CMGS: 3`, and the recipient confirmed the message arrived on their handset |
 | Incoming SMS | **Proven** (message received from a real phone) |
-| Our worker running against this modem | **Never tested** |
+| `npm run diagnose` against this modem | **Proven — VERDICT: READY** |
+| `npm run worker` against this modem | **Never tested** |
 | TRB141 command round trip | **Never tested** |
 
 The transport layer is not in doubt. Everything still open is either our code
@@ -55,6 +56,10 @@ code** — see [§7](#7-still-unproven).
 
 | Property | Value | Source |
 |---|---|---|
+| Model | **`SIMCOM_SIM7600G-H`** | `AT+CGMM` |
+| Firmware | `LE20B04SIM7600G22` | `AT+CGMR` |
+| **IMEI** | **`862636058407253`** | `AT+CGSN` |
+| Network mode | `+CNMP: 2` (automatic) | `AT+CNMP?` |
 | SIM | `+CPIN: READY` | `AT+CPIN?` |
 | Radio | `+CFUN: 1` (not flight mode) | `AT+CFUN?` |
 | Signal | **31/31** | `AT+CSQ` |

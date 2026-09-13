@@ -24,7 +24,7 @@ import { Button, Card, Modal } from "@/components/ui";
 import { ValveStatusBar } from "@/components/charts/ValveStatusBar";
 import { IconBuilding, IconPlus, IconSearch, IconX } from "@/components/icons";
 
-type StatusFilter = "all" | "open" | "closed" | "unknown";
+type StatusFilter = "all" | "on" | "off" | "unknown";
 
 export default function BuildingsPage() {
   const { t } = useTranslation();
@@ -65,8 +65,8 @@ export default function BuildingsPage() {
 
   const filteredBuildings = useMemo(() => {
     return buildings.filter((b) => {
-      if (statusFilter === "open" && b.open === 0) return false;
-      if (statusFilter === "closed" && b.closed === 0) return false;
+      if (statusFilter === "on" && b.open === 0) return false;
+      if (statusFilter === "off" && b.closed === 0) return false;
       if (statusFilter === "unknown" && b.unknown === 0) return false;
       if (!q) return true;
       if (b.name.toLowerCase().includes(q)) return true;
@@ -99,8 +99,8 @@ export default function BuildingsPage() {
           className={inputCls}
         >
           <option value="all">{t("buildings.allStatuses")}</option>
-          <option value="open">{t("buildings.filterOpen")}</option>
-          <option value="closed">{t("buildings.filterClosed")}</option>
+          <option value="on">{t("buildings.filterOn")}</option>
+          <option value="off">{t("buildings.filterOff")}</option>
           <option value="unknown">{t("buildings.filterUnknown")}</option>
         </select>
         <span className="text-xs text-ink-3">

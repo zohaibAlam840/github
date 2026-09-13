@@ -53,7 +53,7 @@ function GatewayInboxScreen() {
   const [inboxLive, setInboxLive] = useState(false);
 
   const [sendingCommand, setSendingCommand] = useState<{
-    action: "open" | "close" | "status";
+    action: "on" | "off" | "status";
     output?: 1 | 2;
     display: string;
   } | null>(null);
@@ -132,7 +132,7 @@ function GatewayInboxScreen() {
    * hardware — this button set can only ever trigger what the worker
    * itself would send for a normal command, so it can't drift.
    */
-  async function sendCommand(action: "open" | "close" | "status", output: 1 | 2, display: string) {
+  async function sendCommand(action: "on" | "off" | "status", output: 1 | 2, display: string) {
     if (!gateway || !settings?.workerUrl || sendingCommand) return;
     setSendingCommand({ action, output, display });
     setSendResult(null);
@@ -140,12 +140,24 @@ function GatewayInboxScreen() {
     const startedAt = Date.now();
     timerRef.current = setInterval(() => setElapsedMs(Date.now() - startedAt), 250);
 
+    const fill = (k: string) => k.replace("{output}", String(output ?? 1));
     const dispatch = await sendGatewayAction(
       settings.workerUrl,
       gateway.simNumber,
       gateway.authPassword,
       action,
-      output
+      output,
+      // Settings, not the worker's environment — see sendGatewayAction.
+      {
+        keyword: fill(
+          action === "on"
+            ? settings.keywordOpen
+            : action === "off"
+              ? settings.keywordClose
+              : settings.keywordStatus
+        ),
+        statusKeyword: fill(settings.keywordStatus),
+      }
     );
     if ("error" in dispatch) {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -203,14 +215,14 @@ function GatewayInboxScreen() {
   const quickCommands = [
     ...outputs.flatMap((n) => [
       {
-        label: `${t("action.open")} V${n}`,
-        action: "open" as const,
+        label: `${t("action.on")} V${n}`,
+        action: "on" as const,
         output: n,
         display: kwOpen.replace("{output}", String(n)),
       },
       {
-        label: `${t("action.close")} V${n}`,
-        action: "close" as const,
+        label: `${t("action.off")} V${n}`,
+        action: "off" as const,
         output: n,
         display: kwClose.replace("{output}", String(n)),
       },

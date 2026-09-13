@@ -215,7 +215,7 @@ function BulkSendPanel() {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState<BuildingStats[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [action, setAction] = useState<CommandAction>("close");
+  const [action, setAction] = useState<CommandAction>("off");
   const [settings, setSettings] = useState<Settings | null>(null);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -300,20 +300,20 @@ function BulkSendPanel() {
 
       <div className="mb-3 flex gap-1.5">
         <Button
-          variant={action === "open" ? "primary" : "ghost"}
+          variant={action === "on" ? "primary" : "ghost"}
           className="!flex-1 !px-2 !py-1.5 !text-xs"
-          onClick={() => setAction("open")}
+          onClick={() => setAction("on")}
         >
           <IconDrop size={13} />
-          {t("action.open")}
+          {t("action.on")}
         </Button>
         <Button
-          variant={action === "close" ? "primary" : "ghost"}
+          variant={action === "off" ? "primary" : "ghost"}
           className="!flex-1 !px-2 !py-1.5 !text-xs"
-          onClick={() => setAction("close")}
+          onClick={() => setAction("off")}
         >
           <IconX size={13} />
-          {t("action.close")}
+          {t("action.off")}
         </Button>
         <Button
           variant={action === "status" ? "primary" : "ghost"}

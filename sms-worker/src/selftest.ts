@@ -6,7 +6,13 @@
  *   npm run selftest
  */
 
-import { normalizeNumber, numbersMatch, parseRelayState, configureCommands } from "./commands.js";
+import {
+  normalizeNumber,
+  numbersMatch,
+  parseRelayState,
+  configureCommands,
+  resolveKeywords,
+} from "./commands.js";
 import { decodeUcs2, describeAtError } from "./transports/serialModem.js";
 
 let pass = 0;
@@ -39,18 +45,23 @@ t('EMPTY must not match (was a bug)', numbersMatch("+97455099003", ""), false);
 t('both empty', numbersMatch("", ""), false);
 t('too short to be safe', numbersMatch("+97455099003", "003"), false);
 
-console.log("\n== parseRelayState (default patterns) ==");
-configureCommands({ replyOpenPattern: "open", replyClosedPattern: "clos" });
-t('bench reply Closed', parseRelayState("Relay - Closed"), "closed");
-t('bench reply Open', parseRelayState("Relay - Open"), "open");
-t('lowercase', parseRelayState("relay - open"), "open");
+console.log("\n== parseRelayState (real TRB141 wording) ==");
+// The client's gateway answered "Relay closed" to valveon on 2026-09-13.
+// A CLOSED relay contact means the output is energised — ON. This reads
+// backwards and is not: see the cfg comment in commands.ts.
+configureCommands({ replyOnPattern: "clos", replyOffPattern: "open" });
+t('client reply "Relay closed" -> ON', parseRelayState("Relay closed"), "on");
+t('bench reply "Relay - Closed" -> ON', parseRelayState("Relay - Closed"), "on");
+t('"Relay - Open" -> OFF', parseRelayState("Relay - Open"), "off");
+t('case insensitive', parseRelayState("relay - open"), "off");
 t('unrelated text', parseRelayState("Command accepted"), "unknown");
 t('AMBIGUOUS two-relay reply', parseRelayState("Relay1 - Open, Relay2 - Closed"), "unknown");
+t('a human typing "Yes" is not a state', parseRelayState("Yes"), "unknown");
 
-console.log("\n== parseRelayState (client words it differently) ==");
-configureCommands({ replyOpenPattern: "ON", replyClosedPattern: "OFF" });
-t('V1=ON', parseRelayState("V1=ON"), "open");
-t('V1=OFF', parseRelayState("V1=OFF"), "closed");
+console.log("\n== parseRelayState (a gateway that words it plainly) ==");
+configureCommands({ replyOnPattern: "ON", replyOffPattern: "OFF" });
+t('V1=ON', parseRelayState("V1=ON"), "on");
+t('V1=OFF', parseRelayState("V1=OFF"), "off");
 
 
 console.log("\n== decodeUcs2 (real bodies captured from the client SIM) ==");
@@ -74,6 +85,59 @@ t("500 names the likely cause", describeAtError("+CMS ERROR: 500").includes("not
 t("303 keeps its code", describeAtError("+CMS ERROR: 303").includes("303"), true);
 t("50 blames the operator", describeAtError("+CMS ERROR: 50").includes("operator"), true);
 t("unknown code stays readable", describeAtError("+CMS ERROR: 999"), "SMS rejected by the network (code 999).");
+
+
+console.log("\n== resolveKeywords (dashboard Settings must win) ==");
+// The worker's own environment defaults. These are the FALLBACK only.
+const fb = { on: "valveon", off: "valveoff", status: "iostatus" };
+
+t("no overrides - worker config is used", resolveKeywords("on", 1, fb), {
+  keyword: "valveon",
+  statusKeyword: "iostatus",
+});
+t("close, no overrides", resolveKeywords("off", 1, fb).keyword, "valveoff");
+t("status is its own confirmation", resolveKeywords("status", 1, fb), {
+  keyword: "iostatus",
+  statusKeyword: "iostatus",
+});
+
+// The bug this exists to prevent: the dashboard edits a keyword, and the
+// worker sends its own anyway.
+t(
+  "dashboard override WINS for the action",
+  resolveKeywords("on", 1, fb, { keyword: "CLIENTON", statusKeyword: "CLIENTSTATUS" }).keyword,
+  "CLIENTON"
+);
+t(
+  "dashboard override WINS for the confirmation",
+  resolveKeywords("on", 1, fb, { keyword: "CLIENTON", statusKeyword: "CLIENTSTATUS" }).statusKeyword,
+  "CLIENTSTATUS"
+);
+t(
+  "status action uses the overridden status keyword",
+  resolveKeywords("status", 2, fb, { statusKeyword: "CLIENTSTATUS" }).keyword,
+  "CLIENTSTATUS"
+);
+
+// {output} must be substituted whichever source the template came from.
+t(
+  "{output} filled from an override",
+  resolveKeywords("on", 2, fb, { keyword: "v{output}on" }).keyword,
+  "v2on"
+);
+t(
+  "{output} filled from the fallback",
+  resolveKeywords("on", 2, { ...fb, on: "v{output}on" }).keyword,
+  "v2on"
+);
+t(
+  "{output} filled in the status keyword too",
+  resolveKeywords("off", 2, fb, { statusKeyword: "iostatus{output}" }).statusKeyword,
+  "iostatus2"
+);
+
+// An empty override must not silently become an empty SMS.
+t("empty override falls back", resolveKeywords("on", 1, fb, { keyword: "" }).keyword, "valveon");
 
 console.log(`\n  ${pass} passed, ${fail} failed\n`);
 process.exit(fail ? 1 : 0);

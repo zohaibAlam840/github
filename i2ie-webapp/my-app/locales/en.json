@@ -57,8 +57,8 @@
     "demoHint": "admin / admin · operator / operator · viewer / viewer"
   },
   "status": {
-    "open": "Open",
-    "closed": "Closed",
+    "on": "ON",
+    "off": "OFF",
     "unknown": "Unknown",
     "pending": "Pending",
     "sent": "Sent",
@@ -70,9 +70,9 @@
     "unreachable": "Unreachable"
   },
   "action": {
-    "open": "Open",
-    "close": "Close",
-    "status": "Check status"
+    "status": "Check status",
+    "on": "Turn ON",
+    "off": "Turn OFF"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -142,13 +142,13 @@
     "recentActivity": "Recent commands",
     "search": "Search buildings or apartments…",
     "allStatuses": "All buildings",
-    "filterOpen": "Has open valves",
-    "filterClosed": "Has closed valves",
     "filterUnknown": "Needs attention",
     "count": "{{count}} buildings",
     "matchingApartments": "{{count}} matching apartments",
     "noResults": "No buildings or apartments match your search.",
-    "noBuildingsYet": "No buildings yet. Add your first one to get started."
+    "noBuildingsYet": "No buildings yet. Add your first one to get started.",
+    "filterOn": "Has ON",
+    "filterOff": "Has OFF"
   },
   "queue": {
     "inFlight": "Processing now",
@@ -225,8 +225,8 @@
   "settings": {
     "smsSection": "SMS command keywords",
     "smsHint": "Must exactly match the rules configured on the TRB141 devices. {output} is replaced by the relay number.",
-    "keywordOpen": "Open keyword",
-    "keywordClose": "Close keyword",
+    "keywordOpen": "ON keyword",
+    "keywordClose": "OFF keyword",
     "keywordStatus": "Status keyword",
     "replySection": "Reply parsing",
     "replyHint": "A reply containing the ON token marks the valve open; the OFF token marks it closed; anything else becomes Unknown.",

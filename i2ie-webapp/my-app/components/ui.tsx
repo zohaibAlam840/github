@@ -87,9 +87,12 @@ export function Field({
 /** Everything a chip needs to render one status consistently. */
 function chipParts(status: ValveStatus | CommandStatus | GatewayReachability | "pending_valve") {
   switch (status) {
-    case "open":
+    // The gateway output, not the valve's physical position — see
+    // parseRelayState in sms-worker/src/commands.ts for why we only ever
+    // claim what the device actually reports.
+    case "on":
       return { color: "text-good", icon: <IconDrop size={13} /> };
-    case "closed":
+    case "off":
       return { color: "text-ink-2", icon: <IconX size={13} /> };
     case "unknown":
       return { color: "text-warn", icon: <IconAlert size={13} /> };

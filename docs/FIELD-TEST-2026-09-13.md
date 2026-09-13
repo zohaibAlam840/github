@@ -21,8 +21,9 @@ assumed. Every claim below has the raw AT output behind it in
 | Outgoing SMS | **Proven to delivery** — `+CMGS: 3`, and the recipient confirmed the message arrived on their handset |
 | Incoming SMS | **Proven** (message received from a real phone) |
 | `npm run diagnose` against this modem | **Proven — VERDICT: READY** |
-| `npm run worker` against this modem | **Never tested** |
-| TRB141 command round trip | **Never tested** |
+| `npm run worker` against this modem | **Proven** — auto-detected COM8, initialised, reached ready |
+| Full software pipeline (send -> wait -> read -> parse -> report) | **Proven** against a real phone |
+| TRB141 command round trip | **Never tested** — the +97466214698 test was a mobile phone, replies typed by a person |
 
 The transport layer is not in doubt. Everything still open is either our code
 meeting this hardware for the first time, or the client's TRB141 configuration.
@@ -343,6 +344,69 @@ machine with no modem, one level down, so it was fixed the same way:
 - Valve rows show an **`assumed`** marker, and the timestamp label reads
   *"Last sent"* rather than *"Last confirmed"* — which would otherwise be a lie
 - Refresh verifies and clears the marker
+
+## 9b. DONE: "open/closed" replaced by ON/OFF
+
+**Deferred once, then done.** Completed 2026-09-13 with full typecheck, build
+and self-test coverage, plus a verified SQLite data migration.
+
+The mapping follows the hardware: `valveon` energises the output, which CLOSES
+the relay contact, and the client gateway answers **"Relay closed"**. So
+`replyOnPattern` is `"clos"` and `replyOffPattern` is `"open"` — this looks
+backwards and is not. The inversion belongs to the hardware; what changed is
+that it now lives in exactly one commented place instead of being spread
+across an inverted ternary and a mislabelled UI.
+
+**What was done**
+
+| | |
+|---|---|
+| `ValveStatus`, `CommandAction`, `RelayState` | `on \| off \| unknown` |
+| The inverted ternary in `controlServer.ts` | deleted — `expectedState = action` |
+| `replyOpenPattern` / `replyClosedPattern` | `replyOnPattern` / `replyOffPattern`, defaults `clos` / `open` |
+| Env vars | `REPLY_ON_PATTERN` / `REPLY_OFF_PATTERN` |
+| UI labels | **Turn ON** / **Turn OFF**, chips read **ON** / **OFF** |
+| Stored data | migrated: `closed → on`, `open → off`; actions `open → on`, `close → off` |
+
+The data migration is idempotent and was verified against a database holding
+the old values. Existing history keeps its meaning: a stored `closed` was an
+energised output, so it becomes `on`.
+
+**One bug the rename surfaced.** The buildings status filter compared against
+`"on"` while its `<option value>` still said `"open"`, so the dropdown silently
+filtered nothing. TypeScript could not catch it because the handler casts with
+`as StatusFilter`. Fixed.
+
+The problem: "open" means three different things in one flow.
+
+| | "Open" means |
+|---|---|
+| The valve | water flows |
+| The relay contact | **no** current — the opposite |
+| Our `ValveStatus` | whichever of those was meant |
+
+Which is why this exists in `controlServer.ts`, and reads backwards:
+
+```ts
+const expectedState: RelayState =
+  action === "open" ? "closed" : action === "close" ? "open" : undefined;
+```
+
+Click **Open** → send `valveon` → TRB replies **"Relay - Closed"** → store
+`"closed"`. Every hop is a chance to invert it.
+
+**The deeper point.** We cannot know the valve's physical position. The TRB
+reports its *relay output*; whether a closed relay means water flowing depends
+on whether the solenoid is normally-open or normally-closed — wiring nobody on
+our side has seen. "Valve Open" is an inference on an inference. **ON/OFF is
+the only state we can honestly claim**, because it is what the device actually
+reports. The SMS keywords are already `valveon` / `valveoff`: the hardware
+speaks ON/OFF, and our UI invented open/closed on top of it.
+
+**The fix, when it happens.** `ValveStatus` and `CommandAction` become
+`on | off | unknown`; the ternary above is deleted (`expectedState = action`);
+reply mapping becomes `replyOnPattern` / `replyOffPattern`, so the client's
+wording stays configurable instead of buried in an inversion.
 
 ## 10. Deployment order
 

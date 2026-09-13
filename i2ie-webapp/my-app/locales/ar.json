@@ -57,8 +57,8 @@
     "demoHint": "admin / admin · operator / operator · viewer / viewer"
   },
   "status": {
-    "open": "مفتوح",
-    "closed": "مغلق",
+    "on": "تشغيل",
+    "off": "إيقاف",
     "unknown": "غير معروف",
     "pending": "قيد الانتظار",
     "sent": "تم الإرسال",
@@ -70,9 +70,9 @@
     "unreachable": "غير متصل"
   },
   "action": {
-    "open": "فتح",
-    "close": "إغلاق",
-    "status": "فحص الحالة"
+    "status": "فحص الحالة",
+    "on": "تشغيل",
+    "off": "إيقاف"
   },
   "dashboard": {
     "title": "لوحة التحكم",
@@ -142,13 +142,13 @@
     "recentActivity": "الأوامر الأخيرة",
     "search": "ابحث عن مبنى أو شقة…",
     "allStatuses": "كل المباني",
-    "filterOpen": "بها صمامات مفتوحة",
-    "filterClosed": "بها صمامات مغلقة",
     "filterUnknown": "تحتاج انتباه",
     "count": "{{count}} مبنى",
     "matchingApartments": "{{count}} شقة مطابقة",
     "noResults": "لا توجد مبانٍ أو شقق مطابقة لبحثك.",
-    "noBuildingsYet": "لا توجد مبانٍ بعد. أضف أول مبنى للبدء."
+    "noBuildingsYet": "لا توجد مبانٍ بعد. أضف أول مبنى للبدء.",
+    "filterOn": "يوجد تشغيل",
+    "filterOff": "يوجد إيقاف"
   },
   "queue": {
     "inFlight": "قيد المعالجة الآن",
@@ -225,9 +225,9 @@
   "settings": {
     "smsSection": "كلمات أوامر الرسائل",
     "smsHint": "يجب أن تطابق تماماً القواعد المعدّة على أجهزة TRB141. يُستبدل {output} برقم المخرج.",
-    "keywordOpen": "كلمة الفتح",
-    "keywordClose": "كلمة الإغلاق",
-    "keywordStatus": "كلمة الحالة",
+    "keywordOpen": "كلمة التشغيل",
+    "keywordClose": "كلمة الإيقاف",
+    "keywordStatus": "كلمة فحص الحالة",
     "replySection": "تحليل الردود",
     "replyHint": "الرد الذي يحتوي رمز ON يعني أن الصمام مفتوح؛ ورمز OFF يعني مغلق؛ وأي شيء آخر يصبح غير معروف.",
     "replyOn": "رمز ON",

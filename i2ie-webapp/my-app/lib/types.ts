@@ -10,10 +10,10 @@
 export type Role = "admin" | "operator" | "viewer";
 
 /** Last-known physical state of a valve (from a confirmed SMS reply/push). */
-export type ValveStatus = "open" | "closed" | "unknown";
+export type ValveStatus = "on" | "off" | "unknown";
 
 /** What an operator can ask a valve to do. */
-export type CommandAction = "open" | "close" | "status";
+export type CommandAction = "on" | "off" | "status";
 
 /** Lifecycle of one queued SMS command (matches backend `commands.status`). */
 export type CommandStatus =

@@ -41,11 +41,11 @@ export function ValveStatusBar({
       <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
         <span className="inline-flex items-center gap-1">
           <IconDrop size={12} className="text-good" />
-          {t("status.open")} {open}
+          {t("status.on")} {open}
         </span>
         <span className="inline-flex items-center gap-1">
           <IconX size={12} className="text-ink-3" />
-          {t("status.closed")} {closed}
+          {t("status.off")} {closed}
         </span>
         <span className="inline-flex items-center gap-1">
           <IconAlert size={12} className="text-warn" />

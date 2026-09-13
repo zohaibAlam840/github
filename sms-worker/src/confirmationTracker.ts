@@ -38,7 +38,7 @@ export type ConfirmationStatus = "sent" | "success" | "failed" | "no_response" |
 export interface ConfirmationRecord {
   id: string;
   simNumber: string;
-  action: "open" | "close" | "status";
+  action: "on" | "off" | "status";
   status: ConfirmationStatus;
   events: ConfirmationEvent[];
   replyText: string | null;
@@ -119,7 +119,7 @@ export interface DispatchOptions {
 export async function dispatchAndTrack(
   transport: SmsTransport,
   rawGateway: GatewayInfo,
-  action: "open" | "close" | "status",
+  action: "on" | "off" | "status",
   actionKeyword: string,
   statusKeyword: string,
   opts: DispatchOptions = {}
@@ -226,7 +226,28 @@ async function confirmInBackground(
     record.relayState = relayState;
     const success = opts.expectedState ? relayState === opts.expectedState : relayState !== "unknown";
     record.status = success ? "success" : "failed";
-    log(record, `Reply received: "${msg.text}" — ${success ? "confirmed" : "unexpected relay state"}`);
+
+    // Three different outcomes used to share the words "unexpected relay
+    // state", and one of them is not a fault at all. A gateway whose reply
+    // we cannot READ looks identical to a valve that did not move — so on an
+    // installation day, a wording mismatch presents as every command failing,
+    // with nothing pointing at the setting that fixes it in one line.
+    if (success) {
+      log(record, `Reply received: "${msg.text}" — confirmed`);
+    } else if (relayState === "unknown") {
+      log(
+        record,
+        `Reply received: "${msg.text}" — but no relay state could be read from it. ` +
+          "The command itself was delivered and answered. If this is how your gateway " +
+          "normally replies, set REPLY_ON_PATTERN / REPLY_OFF_PATTERN to match its wording."
+      );
+    } else {
+      log(
+        record,
+        `Reply received: "${msg.text}" — the gateway reports the relay is ${relayState}, ` +
+          `but this command expected ${opts.expectedState}.`
+      );
+    }
   });
 
   try {

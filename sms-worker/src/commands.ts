@@ -22,22 +22,36 @@ export interface GatewayInfo {
   authPassword: string | null;
 }
 
-export type RelayState = "open" | "closed" | "unknown";
+export type RelayState = "on" | "off" | "unknown";
 
 /* ------------------------------------------------------------------ */
 /* Configuration                                                       */
 /* ------------------------------------------------------------------ */
 
 interface CommandConfig {
-  replyOpenPattern: string;
-  replyClosedPattern: string;
+  replyOnPattern: string;
+  replyOffPattern: string;
   defaultCountryCode: string;
 }
 
-// Defaults match the bench devices. loadConfig() overrides them at startup.
+/**
+ * Defaults match the devices we have actually seen. loadConfig() overrides
+ * them at startup.
+ *
+ * READ THESE CAREFULLY — they look backwards and are not.
+ *
+ * A TRB141 status reply describes the RELAY CONTACT, not the output state:
+ * sending `valveon` energises the output, which CLOSES the contact, and the
+ * device answers "Relay closed" (confirmed on the client's gateway,
+ * 2026-09-13). So the text that means the output is ON is "clos".
+ *
+ * This inversion is real and unavoidable — it belongs to the hardware. What
+ * matters is that it now lives in exactly one place, named, with this comment
+ * on it, instead of being spread across an inverted ternary and a UI label.
+ */
 let cfg: CommandConfig = {
-  replyOpenPattern: "open",
-  replyClosedPattern: "clos",
+  replyOnPattern: "clos", // "Relay closed"  -> contact closed -> output ON
+  replyOffPattern: "open", // "Relay open"    -> contact open   -> output OFF
   defaultCountryCode: "",
 };
 
@@ -100,31 +114,85 @@ export function composeCommandText(keyword: string, gateway: GatewayInfo): strin
 }
 
 /* ------------------------------------------------------------------ */
+/* Keyword resolution                                                  */
+/* ------------------------------------------------------------------ */
+
+export interface KeywordSet {
+  on: string;
+  off: string;
+  status: string;
+}
+
+/**
+ * Works out the exact text to send for one action on one output.
+ *
+ * Lives here, and is tested, because getting it wrong is silent: the wrong
+ * keyword produces no reply and no error, which is indistinguishable from an
+ * unreachable gateway.
+ *
+ * `overrides` are the caller's own settings — the dashboard's Settings screen.
+ * They win over the worker's environment, which is the fallback for callers
+ * that have no settings of their own (the test-command CLI). Two independent
+ * copies of these values used to exist with DIFFERENT defaults, so editing
+ * the keyword in Settings changed nothing that went over the air and the
+ * audit log recorded a command text that was never sent.
+ *
+ * `{output}` is substituted from whichever source the template came from, so
+ * a per-output deployment works either way.
+ */
+export function resolveKeywords(
+  action: "on" | "off" | "status",
+  output: number,
+  fallback: KeywordSet,
+  overrides?: Partial<{ keyword: string; statusKeyword: string }>
+): { keyword: string; statusKeyword: string } {
+  const fill = (k: string) => k.replace("{output}", String(output));
+  const statusKeyword = fill(overrides?.statusKeyword ?? fallback.status);
+
+  if (action === "status") return { keyword: statusKeyword, statusKeyword };
+
+  const keyword = overrides?.keyword
+    ? fill(overrides.keyword)
+    : fill(action === "on" ? fallback.on : fallback.off);
+
+  return { keyword, statusKeyword };
+}
+
+/* ------------------------------------------------------------------ */
 /* Reply interpretation                                                */
 /* ------------------------------------------------------------------ */
 
 /**
- * Reads a relay state out of a TRB reply, e.g. "Relay - Closed".
+ * Reads the OUTPUT state out of a TRB reply, e.g. "Relay closed" -> "on".
  *
- * Two deliberate behaviours:
+ * ON/OFF, not open/closed, and deliberately so. "Open" means opposite things
+ * for a valve (water flows) and for a relay contact (no current), and we
+ * cannot know the valve's physical position anyway — that depends on whether
+ * the solenoid is normally-open or normally-closed, which is wiring nobody on
+ * our side has seen. The output state is the only thing the device actually
+ * tells us, so it is the only thing we claim.
  *
- *  - The words are configurable. The device's Message text template is
- *    editable, so a client's units may word this differently.
+ * Three deliberate behaviours:
  *
- *  - If a reply matches BOTH patterns it returns "unknown" rather than
- *    picking the first. A TRB141 has two relays, and a status reply that
- *    reports both ("Relay1 - Open, Relay2 - Closed") cannot be attributed to
- *    one valve. Guessing there would silently show the wrong state on the
- *    dashboard; "unknown" is visible and prompts a real fix.
+ *  - The words are configurable, because the device's Message text template
+ *    is editable and a client's units may word it differently.
+ *
+ *  - The mapping from those words to ON/OFF lives in the patterns (see the
+ *    cfg defaults above), not in code.
+ *
+ *  - A reply matching BOTH patterns returns "unknown" rather than picking
+ *    one. A TRB141 has two relays, and a reply reporting both ("Relay1 open,
+ *    Relay2 closed") cannot be attributed to a single output. Guessing would
+ *    silently show the wrong state; "unknown" is visible and prompts a fix.
  */
 export function parseRelayState(replyText: string): RelayState {
   const t = replyText.toLowerCase();
-  const open = cfg.replyOpenPattern ? t.includes(cfg.replyOpenPattern.toLowerCase()) : false;
-  const closed = cfg.replyClosedPattern ? t.includes(cfg.replyClosedPattern.toLowerCase()) : false;
+  const on = cfg.replyOnPattern ? t.includes(cfg.replyOnPattern.toLowerCase()) : false;
+  const off = cfg.replyOffPattern ? t.includes(cfg.replyOffPattern.toLowerCase()) : false;
 
-  if (open && closed) return "unknown"; // ambiguous — see above
-  if (open) return "open";
-  if (closed) return "closed";
+  if (on && off) return "unknown"; // ambiguous — see above
+  if (on) return "on";
+  if (off) return "off";
   return "unknown";
 }
 

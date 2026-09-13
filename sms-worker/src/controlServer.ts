@@ -41,7 +41,7 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { SmsTransport } from "./transports/types.js";
 import type { ModemSupervisor } from "./transports/supervisor.js";
 import { findUndrivenModems } from "./hardware/windowsPnp.js";
-import { normalizeNumber, type RelayState } from "./commands.js";
+import { normalizeNumber, resolveKeywords, type RelayState } from "./commands.js";
 import { dispatchAndTrack, getRecord } from "./confirmationTracker.js";
 import { getInbox, recordOutgoing } from "./inbox.js";
 import type { WorkerConfig } from "./config.js";
@@ -71,10 +71,26 @@ function readJsonBody(req: IncomingMessage): Promise<unknown> {
 interface SendRequestBody {
   simNumber: string;
   authPassword?: string | null;
-  action: "open" | "close" | "status";
+  action: "on" | "off" | "status";
   output?: 1 | 2;
   /** Default true. false = skip the confirmation SMS entirely (open/close only). */
   confirm?: boolean;
+  /**
+   * The keywords to actually send. Supplied by the dashboard, which is where
+   * an operator edits them.
+   *
+   * Two independent copies of these used to exist — the dashboard's Settings
+   * screen and this worker's environment — and nothing reconciled them. They
+   * did not even share defaults ("v1on" here, "valveon" there), so editing the
+   * keyword in Settings changed nothing that went over the air, and the audit
+   * log recorded a command text that was never sent.
+   *
+   * Whatever the caller supplies wins. The worker's own config remains the
+   * fallback for callers that have no settings of their own, such as the
+   * test-command CLI.
+   */
+  keyword?: string;
+  statusKeyword?: string;
 }
 
 /** Answers a request whose handler threw, instead of leaving it hanging. */
@@ -132,9 +148,10 @@ export function startControlServer(config: WorkerConfig, supervisor: ModemSuperv
           detail: health.reason,
           comPort: health.comPort,
           modem: health,
-          // The worker's OWN keywords — the ones actually used for every
-          // dispatch. The dashboard has a separate copy that nothing syncs,
-          // so showing these avoids acting on a value that will not be sent.
+          // The worker's FALLBACK keywords, used only when a caller supplies
+          // none of its own — the test-command CLI, or a direct HTTP call.
+          // The dashboard sends its Settings values with every dispatch and
+          // those win, so these are for diagnosis, not the live values.
           keywordOpen: config.keywordOpen,
           keywordClose: config.keywordClose,
           keywordStatus: config.keywordStatus,
@@ -228,7 +245,15 @@ export function startControlServer(config: WorkerConfig, supervisor: ModemSuperv
     if (req.method === "POST" && path === "/send") {
       readJsonBody(req)
         .then(async (body) => {
-          const { simNumber, authPassword, action, output, confirm } = body as SendRequestBody;
+          const {
+            simNumber,
+            authPassword,
+            action,
+            output,
+            confirm,
+            keyword: keywordOverride,
+            statusKeyword: statusOverride,
+          } = body as SendRequestBody;
           console.log(`[controlServer] /send received: ${action} -> ${simNumber} (output ${output ?? 1})`);
           if (!simNumber || !action) {
             console.warn("[controlServer] /send rejected: missing simNumber or action");
@@ -251,20 +276,20 @@ export function startControlServer(config: WorkerConfig, supervisor: ModemSuperv
           // for open and close only, so a deployment whose status rule is
           // per-output ("iostatus{output}") sent the literal text "{output}"
           // over the air and got no reply, with nothing to explain why.
-          const fill = (k: string) => k.replace("{output}", String(outIdx));
-          const statusKeyword = fill(config.keywordStatus);
-          const keyword =
-            action === "open"
-              ? fill(config.keywordOpen)
-              : action === "close"
-                ? fill(config.keywordClose)
-                : statusKeyword;
+          // Caller's keywords win — see SendRequestBody and resolveKeywords.
+          const { keyword, statusKeyword } = resolveKeywords(
+            action,
+            outIdx,
+            { on: config.keywordOpen, off: config.keywordClose, status: config.keywordStatus },
+            { keyword: keywordOverride, statusKeyword: statusOverride }
+          );
 
           const gateway = { simNumber, authPassword: authPassword ?? null };
-          const expectedState: RelayState | undefined =
-            action === "open" ? "closed" : action === "close" ? "open" : undefined;
-          // Bench mapping confirmed on this project's TRB: valveon -> relay
-          // Closed, valveoff -> relay Open. See memory i2i-valve-system.md.
+          // Send ON, expect ON. The inversion that used to live on this line
+          // ("open" expecting "closed") is gone: it was the relay-contact
+          // wording leaking into the command layer, and it now lives once, in
+          // the reply patterns in commands.ts, where it is named and commented.
+          const expectedState: RelayState | undefined = action === "status" ? undefined : action;
 
           const willConfirm = confirm ?? true;
           console.log(

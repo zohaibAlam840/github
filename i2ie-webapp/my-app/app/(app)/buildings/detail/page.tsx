@@ -118,13 +118,13 @@ function BuildingDetailScreen() {
           icon={<IconValve size={14} />}
         />
         <StatTile
-          label={t("status.open")}
+          label={t("status.on")}
           value={building.open}
           icon={<IconDrop size={14} />}
           accent="text-good"
         />
         <StatTile
-          label={t("status.closed")}
+          label={t("status.off")}
           value={building.closed}
           icon={<IconX size={14} />}
           accent="text-ink-2"
@@ -166,8 +166,8 @@ function BuildingDetailScreen() {
           <ul className="divide-y divide-hairline">
             {units.map((unit) => {
               const unitValves = valves.filter((v) => v.unitId === unit.id);
-              const open = unitValves.filter((v) => v.lastStatus === "open").length;
-              const closed = unitValves.filter((v) => v.lastStatus === "closed").length;
+              const open = unitValves.filter((v) => v.lastStatus === "on").length;
+              const closed = unitValves.filter((v) => v.lastStatus === "off").length;
               const unknown = unitValves.length - open - closed;
               return (
                 <li key={unit.id}>

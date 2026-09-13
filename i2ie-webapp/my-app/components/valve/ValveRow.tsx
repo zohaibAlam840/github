@@ -184,19 +184,19 @@ export function ValveRow({
               variant="ghost"
               className="!px-3 !py-1.5 !text-xs"
               disabled={pending || busy}
-              onClick={() => act("open")}
+              onClick={() => act("on")}
             >
               <IconDrop size={13} className="text-good" />
-              {t("action.open")}
+              {t("action.on")}
             </Button>
             <Button
               variant="ghost"
               className="!px-3 !py-1.5 !text-xs"
               disabled={pending || busy}
-              onClick={() => act("close")}
+              onClick={() => act("off")}
             >
               <IconX size={13} />
-              {t("action.close")}
+              {t("action.off")}
             </Button>
             <Button
               variant="ghost"

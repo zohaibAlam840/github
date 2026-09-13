@@ -29,8 +29,8 @@ export interface WorkerConfig {
    * device, so these are patterns rather than hard-coded words. If a client's
    * units answer differently, this is a settings change, not a code change.
    */
-  replyOpenPattern: string;
-  replyClosedPattern: string;
+  replyOnPattern: string;
+  replyOffPattern: string;
 
   /**
    * Numbers are typed into the dashboard in whatever format suits the
@@ -83,8 +83,8 @@ export function loadConfig(): WorkerConfig {
     keywordClose: process.env.KEYWORD_CLOSE ?? "valveoff",
     keywordStatus: process.env.KEYWORD_STATUS ?? "iostatus",
 
-    replyOpenPattern: process.env.REPLY_OPEN_PATTERN ?? "open",
-    replyClosedPattern: process.env.REPLY_CLOSED_PATTERN ?? "clos",
+    replyOnPattern: process.env.REPLY_ON_PATTERN ?? "clos",
+    replyOffPattern: process.env.REPLY_OFF_PATTERN ?? "open",
 
     defaultCountryCode: process.env.DEFAULT_COUNTRY_CODE ?? "+974",
     smscOverride: process.env.SMSC ?? null,

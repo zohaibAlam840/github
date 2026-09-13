@@ -14,9 +14,16 @@ import { randomUUID, scryptSync, randomBytes } from "node:crypto";
 import type { Settings } from "../types";
 
 export const DEFAULT_SETTINGS: Settings = {
-  keywordOpen: "v{output}on",
-  keywordClose: "v{output}off",
-  keywordStatus: "status",
+  // The keywords actually proven against a TRB141 — and the same defaults the
+  // worker carries, so a fresh install agrees with itself. These were
+  // "v{output}on"/"v{output}off"/"status" here and "valveon"/"valveoff"/
+  // "iostatus" in the worker, which is how the audit log came to record a
+  // command text that was never sent.
+  //
+  // {output} is still substituted, for deployments whose rules are per-output.
+  keywordOpen: "valveon",
+  keywordClose: "valveoff",
+  keywordStatus: "iostatus",
   replyOnToken: "ON",
   replyOffToken: "OFF",
   sendGapMs: 2200,
@@ -149,8 +156,42 @@ export function openDb(path: string): DatabaseSync {
   `);
 
   addMissingColumns(db);
+  renameOpenClosedToOnOff(db);
   seedIfEmpty(db);
   return db;
+}
+
+/**
+ * Rewrites the old open/closed vocabulary to on/off.
+ *
+ * "Open" meant three different things at once — water flowing, a relay
+ * contact with no current, and whichever of those we had in mind — so the
+ * codebase carried an inverted ternary to reconcile them. We now report the
+ * gateway OUTPUT state, which is the only thing the device actually tells us.
+ *
+ * The mapping follows the hardware: sending `valveon` energises the output,
+ * which CLOSES the relay contact, and the device answers "Relay closed".
+ * So a stored 'closed' was an energised output and becomes 'on'.
+ *
+ * Idempotent — after the first run there are no old values left to match.
+ */
+function renameOpenClosedToOnOff(db: DatabaseSync) {
+  const stale = db
+    .prepare("SELECT COUNT(*) AS n FROM valves WHERE last_status IN ('open','closed')")
+    .get() as { n: number };
+  if (stale.n === 0) return;
+
+  db.exec("UPDATE valves SET last_status = 'on'  WHERE last_status = 'closed'");
+  db.exec("UPDATE valves SET last_status = 'off' WHERE last_status = 'open'");
+  // Command and activity history use the ACTION vocabulary, where "open"
+  // always meant "energise" — a straight rename with no inversion.
+  db.exec("UPDATE commands SET action = 'on'  WHERE action = 'open'");
+  db.exec("UPDATE commands SET action = 'off' WHERE action = 'close'");
+  db.exec("UPDATE activity SET action = 'on'  WHERE action = 'open'");
+  db.exec("UPDATE activity SET action = 'off' WHERE action = 'close'");
+  db.exec("UPDATE activity SET valve_status = 'on'  WHERE valve_status = 'closed'");
+  db.exec("UPDATE activity SET valve_status = 'off' WHERE valve_status = 'open'");
+  console.warn(`[db] Migrated ${stale.n} valve row(s) from open/closed to on/off.`);
 }
 
 /**

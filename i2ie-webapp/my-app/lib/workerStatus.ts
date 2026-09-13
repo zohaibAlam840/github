@@ -251,14 +251,28 @@ export async function sendGatewayAction(
   workerUrl: string,
   simNumber: string,
   authPassword: string | null,
-  action: "open" | "close" | "status",
-  output?: 1 | 2
+  action: "on" | "off" | "status",
+  output?: 1 | 2,
+  /**
+   * The keywords from Settings. Pass them: without them the worker falls back
+   * to its own environment, which is a second, independently-editable copy of
+   * the same three values — the thing that let the audit log and the radio
+   * disagree.
+   */
+  keywords?: { keyword?: string; statusKeyword?: string }
 ): Promise<{ trackingId: string } | { error: string }> {
   try {
     const res = await fetch(`${workerUrl}/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ simNumber, authPassword, action, output }),
+      body: JSON.stringify({
+        simNumber,
+        authPassword,
+        action,
+        output,
+        keyword: keywords?.keyword,
+        statusKeyword: keywords?.statusKeyword,
+      }),
     });
     if (!res.ok) return { error: await describeWorkerError(res) };
     const dispatch = (await res.json()) as { trackingId: string };

@@ -465,8 +465,8 @@ export function createRepo(db: DatabaseSync) {
            (SELECT COUNT(*) FROM buildings) AS buildings,
            (SELECT COUNT(*) FROM units) AS units,
            (SELECT COUNT(*) FROM valves) AS valves,
-           (SELECT COUNT(*) FROM valves WHERE last_status = 'open') AS open,
-           (SELECT COUNT(*) FROM valves WHERE last_status = 'closed') AS closed,
+           (SELECT COUNT(*) FROM valves WHERE last_status = 'on') AS open,
+           (SELECT COUNT(*) FROM valves WHERE last_status = 'off') AS closed,
            (SELECT COUNT(*) FROM commands WHERE status IN ('pending','sent')) AS pendingCommands`
       )
       .get() as any;
@@ -488,8 +488,8 @@ export function createRepo(db: DatabaseSync) {
            b.*,
            (SELECT COUNT(*) FROM units u WHERE u.building_id = b.id) AS unit_count,
            (SELECT COUNT(*) FROM valves v JOIN units u ON u.id = v.unit_id WHERE u.building_id = b.id) AS valve_count,
-           (SELECT COUNT(*) FROM valves v JOIN units u ON u.id = v.unit_id WHERE u.building_id = b.id AND v.last_status = 'open') AS open_count,
-           (SELECT COUNT(*) FROM valves v JOIN units u ON u.id = v.unit_id WHERE u.building_id = b.id AND v.last_status = 'closed') AS closed_count,
+           (SELECT COUNT(*) FROM valves v JOIN units u ON u.id = v.unit_id WHERE u.building_id = b.id AND v.last_status = 'on') AS open_count,
+           (SELECT COUNT(*) FROM valves v JOIN units u ON u.id = v.unit_id WHERE u.building_id = b.id AND v.last_status = 'off') AS closed_count,
            (SELECT COUNT(*) FROM valves v JOIN units u ON u.id = v.unit_id WHERE u.building_id = b.id AND v.last_status = 'unknown') AS unknown_count
          FROM buildings b ORDER BY b.id`
       )

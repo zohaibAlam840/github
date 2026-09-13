@@ -69,6 +69,21 @@ export function createQueueEngine(repo: Repo) {
     repo.setValvePending(valve.id, null);
   }
 
+  /**
+   * The exact SMS keyword for one action on one valve.
+   *
+   * One function, used both for the audit log and for what is sent to the
+   * worker, so the record and the radio can never disagree. They did before:
+   * the log was written from these settings while the worker sent keywords
+   * from its own environment, and the two had different defaults.
+   */
+  function keywordFor(action: CommandAction, valve: Valve): string {
+    const s = repo.getSettings();
+    const template =
+      action === "status" ? s.keywordStatus : action === "on" ? s.keywordOpen : s.keywordClose;
+    return template.replace("{output}", String(valve.outputIndex));
+  }
+
   /* ---------- queueing ---------- */
 
   function queueCommand(valveId: number, action: CommandAction, userId: number, userName: string): Command {
@@ -77,9 +92,7 @@ export function createQueueEngine(repo: Repo) {
     const gateway = repo.getGateway(valve.gatewayId);
     const settings = repo.getSettings();
 
-    const template =
-      action === "status" ? settings.keywordStatus : action === "open" ? settings.keywordOpen : settings.keywordClose;
-    const keyword = template.replace("{output}", String(valve.outputIndex));
+    const keyword = keywordFor(action, valve);
 
     const command = repo.createCommand({
       valveId,
@@ -185,7 +198,7 @@ export function createQueueEngine(repo: Repo) {
     logActivity("sent", valve, command.userName, command.action, null);
 
     if (command.action !== "status" && !confirmAfterCommand) {
-      const assumedStatus: ValveStatus = command.action === "open" ? "open" : "closed";
+      const assumedStatus: ValveStatus = command.action === "on" ? "on" : "off";
       logEvent("Command accepted by modem. Confirmation skipped (disabled in Settings) — not verified.");
       repo.updateCommand(command.id, { status: "unconfirmed", events });
       // Assumed, not verified: nothing replied. The valve row shows this
@@ -214,17 +227,17 @@ export function createQueueEngine(repo: Repo) {
     await sleep(rand(REPLY_MIN_MS, REPLY_MAX_MS));
 
     const newStatus: ValveStatus =
-      command.action === "open"
-        ? "open"
-        : command.action === "close"
-          ? "closed"
+      command.action === "on"
+        ? "on"
+        : command.action === "off"
+          ? "off"
           : valve.lastStatus === "unknown"
             ? Math.random() < 0.5
-              ? "open"
-              : "closed"
+              ? "on"
+              : "off"
             : valve.lastStatus;
 
-    const replyText = `V${valve.outputIndex}=${newStatus === "open" ? "ON" : "OFF"}`;
+    const replyText = `V${valve.outputIndex}=${newStatus === "on" ? "ON" : "OFF"}`;
     const replyAt = now();
     repo.updateCommand(command.id, { status: "success", replyText, replyAt, events });
     repo.setValveStatus(valve.id, newStatus, true);
@@ -273,7 +286,7 @@ export function createQueueEngine(repo: Repo) {
         broadcast("valve:update", { valve: { ...valve, lastStatus: record.relayState, statusVerified: true, pendingCommandId: null }, source: "reply" });
         logActivity("reply", valve, userName, action, record.relayState);
       } else if (record.status === "unconfirmed") {
-        const assumedStatus: ValveStatus = action === "open" ? "open" : action === "close" ? "closed" : valve.lastStatus;
+        const assumedStatus: ValveStatus = action === "on" ? "on" : action === "off" ? "off" : valve.lastStatus;
         // Assumed, not verified: nothing replied. The valve row shows this
       // as such until a Refresh actually confirms it.
       repo.setValveStatus(valve.id, assumedStatus, true, false);
@@ -320,6 +333,12 @@ export function createQueueEngine(repo: Repo) {
           // Irrelevant for a plain status query (already a single message) —
           // only open/close have a confirmation step to skip.
           confirm: command.action === "status" ? true : confirmAfterCommand,
+          // Settings is the single source of truth for keywords. Without
+          // these the worker fell back to its own environment, which had
+          // DIFFERENT defaults — so the audit log recorded "v1on" while
+          // "valveon" actually went out over the air.
+          keyword: keywordFor(command.action, valve),
+          statusKeyword: keywordFor("status", valve),
         }),
       });
       // The worker's own words, not the status code. A 503 here means the
@@ -446,7 +465,14 @@ export function createQueueEngine(repo: Repo) {
       const res = await fetch(`${workerUrl}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ simNumber, authPassword, action: "status" }),
+        body: JSON.stringify({
+          simNumber,
+          authPassword,
+          action: "status",
+          // Same source of truth as every other dispatch. A ping is not tied
+          // to one valve, so a per-output template resolves against output 1.
+          statusKeyword: repo.getSettings().keywordStatus.replace("{output}", "1"),
+        }),
       });
       // The worker's own words, not the status code. A 503 here means the
       // worker answered and told us the modem is missing — reporting that as

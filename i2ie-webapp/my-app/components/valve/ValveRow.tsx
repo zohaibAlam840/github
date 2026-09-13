@@ -178,7 +178,12 @@ export function ValveRow({
         <TimeAgo iso={valve.lastSeenAt} />
       </span>
 
-      <span className="ms-auto flex items-center gap-2">
+      {/*
+        On a phone these four controls do not fit beside the valve code, and
+        without wrapping they simply ran off the edge. Below sm they take
+        their own full-width line; from sm they sit right-aligned as before.
+      */}
+      <span className="flex w-full flex-wrap items-center gap-2 sm:ms-auto sm:w-auto">
         {canOperate && (
           <>
             <Button

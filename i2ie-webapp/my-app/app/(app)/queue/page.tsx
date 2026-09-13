@@ -298,10 +298,19 @@ function BulkSendPanel() {
         )}
       </div>
 
-      <div className="mb-3 flex gap-1.5">
+      {/*
+        The action picker follows the panel, not the viewport.
+        
+        This panel is FULL WIDTH below xl and a ~290px sidebar above it, so a
+        single row of three buttons cannot fit at both sizes — at xl the
+        labels broke mid-phrase into "Turn / ON". Stacked when the panel is
+        narrow (phone, and the xl sidebar), three across only in the middle
+        band where the panel actually spans the page.
+      */}
+      <div className="mb-3 grid grid-cols-1 gap-1.5 sm:grid-cols-3 xl:grid-cols-1">
         <Button
           variant={action === "on" ? "primary" : "ghost"}
-          className="!flex-1 !px-2 !py-1.5 !text-xs"
+          className="!justify-start !gap-2 !px-3 !py-1.5 !text-xs !whitespace-nowrap sm:!justify-center xl:!justify-start"
           onClick={() => setAction("on")}
         >
           <IconDrop size={13} />
@@ -309,7 +318,7 @@ function BulkSendPanel() {
         </Button>
         <Button
           variant={action === "off" ? "primary" : "ghost"}
-          className="!flex-1 !px-2 !py-1.5 !text-xs"
+          className="!justify-start !gap-2 !px-3 !py-1.5 !text-xs !whitespace-nowrap sm:!justify-center xl:!justify-start"
           onClick={() => setAction("off")}
         >
           <IconX size={13} />
@@ -317,11 +326,11 @@ function BulkSendPanel() {
         </Button>
         <Button
           variant={action === "status" ? "primary" : "ghost"}
-          className="!flex-1 !px-2 !py-1.5 !text-xs"
+          className="!justify-start !gap-2 !px-3 !py-1.5 !text-xs !whitespace-nowrap sm:!justify-center xl:!justify-start"
           onClick={() => setAction("status")}
         >
           <IconSend size={13} />
-          {t("buildings.refresh")}
+          {t("action.checkStatus")}
         </Button>
       </div>
 

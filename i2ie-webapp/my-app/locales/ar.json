@@ -395,7 +395,8 @@
     "ownNumber": "رقم هذا المودم",
     "ownNumberUnknown": "غير مخزَّن على الشريحة — اسأل من استلم رسالة الاختبار عن الرقم الذي وصلته منه",
     "operator": "المشغّل",
-    "technology": "نوع الشبكة"
+    "technology": "نوع الشبكة",
+    "storageUnknown": "لم يُقَس بعد"
   },
   "modem": {
     "workerSection": "اتصال البرنامج الخلفي",

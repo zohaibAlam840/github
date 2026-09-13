@@ -81,6 +81,16 @@ export class ModemSupervisor implements SmsTransport {
    * and the dashboard coloured it by the wrong one.
    */
   private lastRejection: { state: ModemState; reason: string } | null = null;
+  /**
+   * Whether storage has been measured for the CURRENT modem.
+   *
+   * Storage is not part of the detection probe, so it stayed null until tick
+   * 20 — five minutes during which the dashboard showed a bare dash for the
+   * one fault that fails silently and takes every reply with it. Measuring
+   * once on adoption fixes that; the flag stops a module that does not
+   * support AT+CPMS from being asked every 15 seconds forever.
+   */
+  private storageProbed = false;
 
   constructor(private config: WorkerConfig) {}
 
@@ -175,6 +185,7 @@ export class ModemSupervisor implements SmsTransport {
     if (this.timer) clearInterval(this.timer);
     this.transport?.close();
     this.transport = null;
+    this.storageProbed = false;
   }
 
   /**
@@ -193,6 +204,7 @@ export class ModemSupervisor implements SmsTransport {
     if (this.transport) {
       this.transport.close();
       this.transport = null;
+      this.storageProbed = false;
       this.snapshot = { ...this.snapshot, failures: 0 };
     }
     await this.tick(true);
@@ -263,11 +275,12 @@ export class ModemSupervisor implements SmsTransport {
     // Tier 3 — slow-moving, but catastrophic when wrong. Storage filling is
     // the one that matters: once full the network stops delivering replies
     // with no error anywhere.
-    if (this.ticks % CONFIG_DRIFT_EVERY === 0) {
+    if (!this.storageProbed || this.ticks % CONFIG_DRIFT_EVERY === 0) {
       try {
         this.snapshot = { ...this.snapshot, storage: await transport.readStorage() };
+        this.storageProbed = true;
       } catch {
-        /* keep the last reading */
+        /* keep the last reading; try again next tick */
       }
     }
 
@@ -317,6 +330,7 @@ export class ModemSupervisor implements SmsTransport {
     const comPort = this.snapshot.comPort;
     this.transport?.close();
     this.transport = null;
+    this.storageProbed = false;
 
     if (comPort) {
       const reopened = new SerialModemTransport({
@@ -346,6 +360,7 @@ export class ModemSupervisor implements SmsTransport {
   private loseModem(reason: string) {
     this.transport?.close();
     this.transport = null;
+    this.storageProbed = false;
     this.attachedTo = null;
     this.rejected.clear(); // it may come back on a different port
     this.lastRejection = null;
@@ -437,6 +452,8 @@ export class ModemSupervisor implements SmsTransport {
     }
 
     this.transport = transport;
+
+    this.storageProbed = false;
     this.attachHandlers();
     this.lastRejection = null;
     this.snapshot = { ...applyProbe(this.snapshot, chosen), failures: 0 };

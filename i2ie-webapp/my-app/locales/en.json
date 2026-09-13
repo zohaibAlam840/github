@@ -395,7 +395,8 @@
     "ownNumber": "This modem's number",
     "ownNumberUnknown": "Not stored on the SIM — ask whoever received a test SMS what number it came from",
     "operator": "Operator",
-    "technology": "Network type"
+    "technology": "Network type",
+    "storageUnknown": "Not measured yet"
   },
   "modem": {
     "workerSection": "Worker connection",

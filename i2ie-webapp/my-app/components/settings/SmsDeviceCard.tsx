@@ -196,13 +196,16 @@ export function SmsDeviceCard({ workerUrl }: { workerUrl: string | null }) {
           <Row label={t("device.smsc")} value={modem.smsc ?? "—"} />
           <Row
             label={t("device.storage")}
+            // A dash here read as "measured, and empty". It actually meant
+            // "not measured yet", which for the one fault that silently
+            // stops every reply is the wrong thing to imply.
             value={
               modem.storage
                 ? t("device.storageValue", {
                     used: modem.storage.used,
                     total: modem.storage.total,
                   })
-                : "—"
+                : t("device.storageUnknown")
             }
           />
         </div>

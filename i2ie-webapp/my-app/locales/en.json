@@ -212,7 +212,8 @@
     "sendNeedsWorker": "Connect a worker (Settings → Worker URL) to send a real message — this only works against real hardware.",
     "sendNeedsPermission": "Viewer accounts can't send messages.",
     "sendWaiting": "Waiting for a reply… {{seconds}}s",
-    "sendSeeChat": "Sent messages and any replies appear in the Inbox above."
+    "sendSeeChat": "Sent messages and any replies appear in the Inbox above.",
+    "simHint": "Type it any way you like — 0097466214698, 066214698 or +97466214698. It is corrected to international format when you leave the field."
   },
   "logs": {
     "search": "Search valve / building / user…",
@@ -376,7 +377,16 @@
     "testHint": "Sends one real SMS to any number, with no gateway or keywords involved. If a valve command fails, this tells you whether the modem or the gateway is at fault.",
     "testSent": "Sent — the network accepted it (reference {{ref}}). Check the phone.",
     "testFailed": "The test message could not be sent.",
-    "checkedAt": "Last checked at {{time}}"
+    "checkedAt": "Last checked at {{time}}",
+    "deviceHeading": "Device",
+    "networkHeading": "SIM and network",
+    "manufacturer": "Manufacturer",
+    "firmware": "Firmware",
+    "connectedVia": "Connected via",
+    "ownNumber": "This modem's number",
+    "ownNumberUnknown": "Not stored on the SIM — ask whoever received a test SMS what number it came from",
+    "operator": "Operator",
+    "technology": "Network type"
   },
   "modem": {
     "workerSection": "Worker connection",

@@ -91,7 +91,7 @@ function ModemScreen({ canEditWorkerUrl }: { canEditWorkerUrl: boolean }) {
                 label={t("settings.workerUrl")}
                 value={draftUrl}
                 onChange={(e) => setDraftUrl(e.target.value)}
-                placeholder="http://127.0.0.1:8080"
+                placeholder={t("settings.workerUrlPlaceholder")}
                 dir="ltr"
               />
             </div>

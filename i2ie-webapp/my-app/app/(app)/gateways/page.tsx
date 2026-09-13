@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { fetchWorkerInbox } from "@/lib/workerStatus";
-import { numbersMatch } from "@/lib/phone";
+import { normalizePhone, numbersMatch } from "@/lib/phone";
 import type { Gateway, PingResult } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
 import { Button, Card, StatusChip, TimeAgo } from "@/components/ui";
@@ -303,9 +303,11 @@ function AddGatewayForm({ onAdded }: { onAdded: () => void }) {
   async function submit(e: FormEvent) {
     e.preventDefault();
     if (!label.trim() || !sim.trim()) return;
+    // Normalise here too, not just on blur: a paste followed by Enter never
+    // fires a blur, and the stored number must be the one we can actually send to.
     await api.gateways.create(
       label.trim(),
-      sim.trim(),
+      normalizePhone(sim),
       outputs,
       authPassword.trim() || null
     );
@@ -333,8 +335,10 @@ function AddGatewayForm({ onAdded }: { onAdded: () => void }) {
       <input
         value={sim}
         onChange={(e) => setSim(e.target.value)}
+        onBlur={() => setSim((v) => normalizePhone(v))}
         placeholder="+9745xxxxxxx"
         dir="ltr"
+        title={t("gateways.simHint")}
         className="min-w-40 rounded-lg border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-ink outline-none focus:border-brand"
         required
       />

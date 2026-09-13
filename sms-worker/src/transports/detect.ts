@@ -33,6 +33,19 @@ export interface ModemProbe {
   manufacturer?: string;
   model?: string;
   imei?: string;
+  /** Firmware revision (AT+CGMR) — the version to quote in a support call. */
+  firmware?: string;
+  /**
+   * The modem's OWN number (AT+CNUM), i.e. the number a TRB141 sees a command
+   * arrive from and replies to. Frequently EMPTY: it is only returned when the
+   * operator wrote it to the SIM, which prepaid SIMs often do not. Absence is
+   * normal and is not a fault — the UI has to say so rather than show a blank.
+   */
+  ownNumber?: string | null;
+  /** Network operator name (AT+COPS?), e.g. "Vodafone Qtel". */
+  operator?: string | null;
+  /** Radio technology from AT+CPSI?, e.g. "LTE". */
+  technology?: string | null;
   simState?: "ready" | "absent" | "pin_locked" | "unknown";
   registration?: "home" | "roaming" | "searching" | "denied" | "none" | "unknown";
   signal?: number | null;
@@ -176,6 +189,24 @@ async function qualify(
         reason: "No SMS service centre configured — sends would fail silently. Set SMSC in the worker configuration.",
       };
     }
+
+    // --- informational identity ---
+    // Deliberately last and deliberately non-gating: a modem that has passed
+    // every check above can send SMS, and none of these four can change that.
+    // An operator that hides its name, or a SIM with no MSISDN written to it,
+    // must never turn a working modem into a rejected one.
+    probe.firmware = bare(await session.ask("AT+CGMR", 2000)).replace(/^\+CGMR:\s*/i, "") || undefined;
+
+    const cops = (await session.ask("AT+COPS?", 3000)).join(" ");
+    probe.operator = cops.match(/\+COPS:\s*\d+,\d+,"([^"]*)"/i)?.[1] || null;
+
+    // +CNUM: "","+97430373901",145 — the number is the SECOND quoted field.
+    const cnum = (await session.ask("AT+CNUM", 3000)).join(" ");
+    probe.ownNumber = cnum.match(/\+CNUM:\s*"[^"]*",\s*"([^"]+)"/i)?.[1] || null;
+
+    // +CPSI: LTE,Online,427-02,... — the first field is the radio technology.
+    const cpsi = (await session.ask("AT+CPSI?", 3000)).join(" ");
+    probe.technology = cpsi.match(/\+CPSI:\s*([A-Z0-9-]+)/i)?.[1] || null;
 
     return {
       ...probe,

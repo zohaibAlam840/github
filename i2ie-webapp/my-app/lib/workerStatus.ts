@@ -54,9 +54,16 @@ export interface ModemSnapshot {
   reason: string;
   checkedAt: string;
   comPort: string | null;
+  /** Windows friendly name of the port — where the modem is physically attached. */
+  portLabel: string | null;
   model: string | null;
   manufacturer: string | null;
   imei: string | null;
+  firmware: string | null;
+  /** The modem's own number. Null is common (many prepaid SIMs store no MSISDN). */
+  ownNumber: string | null;
+  operator: string | null;
+  technology: string | null;
   sim: "ready" | "absent" | "pin_locked" | "unknown" | null;
   registration: "home" | "roaming" | "searching" | "denied" | "none" | "unknown" | null;
   signal: number | null;

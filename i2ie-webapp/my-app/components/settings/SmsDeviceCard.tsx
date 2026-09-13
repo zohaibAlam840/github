@@ -158,9 +158,28 @@ export function SmsDeviceCard({ workerUrl }: { workerUrl: string | null }) {
 
       {modem && modem.state !== "absent" && (
         <div className="mb-4">
+          <p className="mb-1 mt-2 text-xs font-semibold text-ink-2">{t("device.deviceHeading")}</p>
           <Row label={t("device.model")} value={modem.model ?? "—"} />
-          <Row label={t("device.comPort")} value={modem.comPort ?? "—"} />
+          <Row label={t("device.manufacturer")} value={modem.manufacturer ?? "—"} />
+          <Row label={t("device.firmware")} value={modem.firmware ?? "—"} />
           <Row label={t("device.imei")} value={modem.imei ?? "—"} />
+          <Row label={t("device.comPort")} value={modem.comPort ?? "—"} />
+          {/* Which physical port, by the name Windows shows in Device Manager.
+              A SIM7600 exposes four or five; knowing we are on the AT one and
+              not Diagnostics is the difference between working and hung. */}
+          <Row label={t("device.connectedVia")} value={modem.portLabel ?? "—"} />
+
+          <p className="mb-1 mt-4 text-xs font-semibold text-ink-2">{t("device.networkHeading")}</p>
+          {/* Many prepaid SIMs never had an MSISDN written to them, so AT+CNUM
+              returns nothing. That is normal, and saying "—" would read as a
+              fault — this is the number a TRB141 replies to, so it is worth
+              explaining rather than blanking. */}
+          <Row
+            label={t("device.ownNumber")}
+            value={modem.ownNumber ?? t("device.ownNumberUnknown")}
+          />
+          <Row label={t("device.operator")} value={modem.operator ?? "—"} />
+          <Row label={t("device.technology")} value={modem.technology ?? "—"} />
           <Row label={t("device.sim")} value={modem.sim ? t(`device.sim_${modem.sim}`) : "—"} />
           <Row
             label={t("device.signal")}

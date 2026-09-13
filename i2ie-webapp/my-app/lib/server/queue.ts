@@ -166,12 +166,27 @@ export function createQueueEngine(repo: Repo) {
     confirmAfterCommand: boolean
   ) {
     const events: { ts: string; message: string }[] = [];
+    /*
+     * Every line is prefixed, not just the first.
+     *
+     * This path invents its outcome with Math.random() and a 300-800ms
+     * sleep. Read without the prefix, its trail is indistinguishable from a
+     * real dispatch — "Command accepted by modem" over a modem that was
+     * never contacted. On a handed-over system that is the worst thing this
+     * dashboard could say, so the label goes on the messages themselves
+     * rather than on a chip somewhere else on the screen that an operator
+     * reading the command modal will never see.
+     */
     const logEvent = (message: string) => {
-      events.push({ ts: now(), message });
+      events.push({ ts: now(), message: `[DEMO] ${message}` });
       repo.updateCommand(command.id, { events: [...events] });
       emitCommand({ ...command, events: [...events] });
     };
 
+    logEvent(
+      "No worker address is set, so NO SMS IS BEING SENT. Everything below is " +
+        "simulated. Set the worker address on the Modem page to control real valves."
+    );
     logEvent("Sending command SMS...");
     let sent = false;
     let retries = 0;
@@ -449,7 +464,11 @@ export function createQueueEngine(repo: Repo) {
     return {
       gatewayId,
       ok,
-      replyText: ok ? "GSM: OK, IO: V1=ON;V2=OFF" : null,
+      // Labelled for the same reason the command trail is: an unlabelled
+      // "GSM: OK, IO: V1=ON;V2=OFF" is indistinguishable from a real TRB141
+      // reply, and Ping is the button people press to decide whether a
+      // gateway is genuinely answering.
+      replyText: ok ? "[DEMO — no SMS sent] GSM: OK, IO: V1=ON;V2=OFF" : null,
       roundTripMs: ok ? Date.now() - started : null,
     };
   }

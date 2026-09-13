@@ -11,6 +11,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { normalizePhone } from "@/lib/phone";
 import type { Building, Gateway, PingResult, Unit } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
 import { Button, Card } from "@/components/ui";
@@ -115,7 +116,7 @@ function StepAddGateway({ onCreated }: { onCreated: (g: Gateway) => void }) {
     try {
       const g = await api.gateways.create(
         label.trim(),
-        sim.trim(),
+        normalizePhone(sim),
         outputs,
         authPassword.trim() || null
       );
@@ -151,6 +152,7 @@ function StepAddGateway({ onCreated }: { onCreated: (g: Gateway) => void }) {
           <input
             value={sim}
             onChange={(e) => setSim(e.target.value)}
+            onBlur={() => setSim((v) => normalizePhone(v))}
             placeholder="+9745xxxxxxx"
             dir="ltr"
             className={`${inputCls} font-mono`}

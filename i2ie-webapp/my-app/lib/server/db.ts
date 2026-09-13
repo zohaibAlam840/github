@@ -43,7 +43,24 @@ export const DEFAULT_SETTINGS: Settings = {
   confirmAfterCommand: false,
   smsTransport: "serial_modem",
   comPort: null,
-  workerUrl: null,
+  /*
+   * Point at the worker out of the box.
+   *
+   * This used to be null, which silently selected the SIMULATED dispatch
+   * path in queue.ts — random outcomes, 300-800ms, green ticks, no SMS.
+   * A fresh install therefore looked like it worked while controlling
+   * nothing, and the only cure was knowing to type an address nobody had
+   * been told.
+   *
+   * 3900 is not a guess: the worker binds CONTROL_PORT (default 3900) or
+   * exits with EADDRINUSE — it never falls back to another port — so this
+   * address is correct on every default install. Keep it in step with
+   * controlPort in sms-worker/src/config.ts.
+   *
+   * The honest failure (worker offline, said plainly) beats the dishonest
+   * success it replaces.
+   */
+  workerUrl: "http://localhost:3900",
 };
 
 export function hashPassword(password: string): string {

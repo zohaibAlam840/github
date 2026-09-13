@@ -5,6 +5,7 @@
  */
 
 import type { DatabaseSync } from "node:sqlite";
+import { normalizePhone } from "../phone";
 import type {
   ActivityEvent,
   ActivityKind,
@@ -139,6 +140,10 @@ export function createRepo(db: DatabaseSync) {
     numOutputs: 1 | 2,
     authPassword: string | null
   ): Gateway {
+    // The last line of defence. Both forms normalise on blur, but an API
+    // caller, a seed script or a paste-then-Enter can still arrive in local
+    // format — and a gateway stored as "0097466214698" simply fails to send.
+    simNumber = normalizePhone(simNumber);
     const info = db
       .prepare(
         "INSERT INTO gateways (label, sim_number, num_outputs, auth_password, reachability, last_seen_at) VALUES (?, ?, ?, ?, 'unknown', NULL)"

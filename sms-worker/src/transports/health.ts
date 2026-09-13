@@ -32,9 +32,16 @@ export interface ModemSnapshot {
   checkedAt: string;
 
   comPort: string | null;
+  /** The Windows friendly name of the port, i.e. where it is physically attached. */
+  portLabel: string | null;
   model: string | null;
   manufacturer: string | null;
   imei: string | null;
+  firmware: string | null;
+  /** The modem's own MSISDN. Null is COMMON and not a fault — see ModemProbe. */
+  ownNumber: string | null;
+  operator: string | null;
+  technology: string | null;
 
   sim: ModemProbe["simState"] | null;
   registration: ModemProbe["registration"] | null;
@@ -58,9 +65,14 @@ export function emptySnapshot(): ModemSnapshot {
     reason: "Starting up — looking for a modem.",
     checkedAt: new Date().toISOString(),
     comPort: null,
+    portLabel: null,
     model: null,
     manufacturer: null,
     imei: null,
+    firmware: null,
+    ownNumber: null,
+    operator: null,
+    technology: null,
     sim: null,
     registration: null,
     signal: null,
@@ -77,9 +89,14 @@ export function applyProbe(snapshot: ModemSnapshot, probe: ModemProbe): ModemSna
   return {
     ...snapshot,
     comPort: probe.comPort,
+    portLabel: probe.label ?? null,
     model: probe.model ?? null,
     manufacturer: probe.manufacturer ?? null,
     imei: probe.imei ?? null,
+    firmware: probe.firmware ?? null,
+    ownNumber: probe.ownNumber ?? null,
+    operator: probe.operator ?? null,
+    technology: probe.technology ?? null,
     sim: probe.simState ?? null,
     registration: probe.registration ?? null,
     signal: probe.signal ?? null,

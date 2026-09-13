@@ -1,4 +1,6 @@
 import type { NextConfig } from "next";
+import { fileURLToPath } from "node:url";
+import { dirname } from "node:path";
 
 /*
  * LAN deployment model (updated 2026-08-23 — see lib/api.ts and app/api/):
@@ -15,6 +17,16 @@ import type { NextConfig } from "next";
  */
 const nextConfig: NextConfig = {
   images: { unoptimized: true },
+  /*
+   * Pin the workspace root to THIS directory.
+   *
+   * Turbopack infers the root from the nearest lockfiles, and a stray
+   * package-lock.json one level up made it pick the parent — which is how
+   * a deployment ended up serving a route manifest that 404'd /api/auth/login
+   * while other routes worked. Inference is not something a shipped app
+   * should depend on.
+   */
+  turbopack: { root: dirname(fileURLToPath(import.meta.url)) },
 };
 
 export default nextConfig;

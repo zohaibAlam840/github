@@ -15,12 +15,15 @@ import { api } from "@/lib/api";
 import { onAppEvent } from "@/lib/socket";
 import { debounce } from "@/lib/debounce";
 import { useAuth } from "@/lib/auth";
-import type { BuildingStats, CommandLog, Unit, Valve } from "@/lib/types";
+import type { BuildingStats, CommandAction, CommandLog, Unit, Valve } from "@/lib/types";
 import { Button, Card, StatTile } from "@/components/ui";
 import { ValveStatusBar } from "@/components/charts/ValveStatusBar";
 import { CommandTrendChart } from "@/components/charts/CommandTrendChart";
 import { Breadcrumb } from "@/components/Breadcrumb";
-import { IconAlert, IconBuilding, IconDrop, IconValve, IconX } from "@/components/icons";
+import { IconAlert, IconBuilding, IconDrop, IconSend, IconSpinner, IconValve, IconX } from "@/components/icons";
+
+/** How many units the summary shows before sending you to the full list. */
+const UNITS_PREVIEW = 6;
 
 export default function BuildingDetailPage() {
   return (
@@ -33,7 +36,7 @@ export default function BuildingDetailPage() {
 function BuildingDetailScreen() {
   const { t } = useTranslation();
   const router = useRouter();
-  const { isAdmin } = useAuth();
+  const { isAdmin, canOperate } = useAuth();
   const buildingId = Number(useSearchParams().get("id"));
 
   const [building, setBuilding] = useState<BuildingStats | null>(null);
@@ -137,6 +140,10 @@ function BuildingDetailScreen() {
         />
       </div>
 
+      {canOperate && building.valveCount > 0 && (
+        <SendToBuildingCard buildingId={building.id} valves={valves} onSent={load} />
+      )}
+
       {building.valveCount > 0 && (
         <Card className="p-5">
           <ValveStatusBar
@@ -155,16 +162,36 @@ function BuildingDetailScreen() {
       </Card>
 
       <Card>
-        <h2 className="border-b border-hairline px-5 py-3.5 text-sm font-semibold text-ink">
-          {t("buildings.units")}
-        </h2>
+        <div className="flex flex-wrap items-center gap-2 border-b border-hairline px-5 py-3.5">
+          <h2 className="text-sm font-semibold text-ink">{t("buildings.units")}</h2>
+          <span className="text-xs text-ink-3">
+            {t("dashboard.unitCount", { count: units.length })}
+          </span>
+          {units.length > UNITS_PREVIEW && (
+            <Link
+              href={`/buildings/units?building=${building.id}`}
+              className="ms-auto text-xs font-medium text-brand hover:underline"
+            >
+              {t("buildings.viewAllUnits", { count: units.length })} →
+            </Link>
+          )}
+        </div>
+
+        {/* Adding comes FIRST. On a fresh building the list is empty, and
+            burying the only useful control under an empty state made the
+            page look like a dead end. */}
+        {isAdmin && <AddUnitForm buildingId={building.id} onAdded={load} />}
+
         {units.length === 0 ? (
           <p className="px-5 py-6 text-center text-sm text-ink-3">
             {t("buildings.noUnits")}
           </p>
         ) : (
           <ul className="divide-y divide-hairline">
-            {units.map((unit) => {
+            {/* Only the first few — the rest live on their own paginated
+                page, so a building with 200 units does not render 200 rows
+                nobody scrolled to. */}
+            {units.slice(0, UNITS_PREVIEW).map((unit) => {
               const unitValves = valves.filter((v) => v.unitId === unit.id);
               const open = unitValves.filter((v) => v.lastStatus === "on").length;
               const closed = unitValves.filter((v) => v.lastStatus === "off").length;
@@ -173,7 +200,7 @@ function BuildingDetailScreen() {
                 <li key={unit.id}>
                   <Link
                     href={`/buildings/unit?building=${building.id}&unit=${unit.id}`}
-                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-hairline/30"
+                    className="flex items-center gap-4 px-5 py-3.5 transition-colors hover:bg-brand/5 focus-visible:bg-brand/5 focus-visible:outline-none"
                   >
                     <div className="min-w-32 flex-1">
                       <div className="font-medium text-ink">{unit.name}</div>
@@ -190,7 +217,16 @@ function BuildingDetailScreen() {
             })}
           </ul>
         )}
-        {isAdmin && <AddUnitForm buildingId={building.id} onAdded={load} />}
+        {units.length > UNITS_PREVIEW && (
+          <div className="border-t border-hairline px-5 py-3 text-center">
+            <Link
+              href={`/buildings/units?building=${building.id}`}
+              className="text-xs font-medium text-brand hover:underline"
+            >
+              {t("buildings.viewAllUnits", { count: units.length })} →
+            </Link>
+          </div>
+        )}
       </Card>
     </div>
   );
@@ -227,5 +263,135 @@ function AddUnitForm({
         {t("buildings.addUnit")}
       </Button>
     </form>
+  );
+}
+
+/**
+ * Send one command to every valve in this building.
+ *
+ * The Queue screen already has a bulk panel, but reaching it means leaving
+ * the building you are looking at, finding it in a checkbox list, and
+ * coming back. This is the same server call — one lane, one SMS at a time,
+ * identical pacing — placed where the decision is actually made.
+ *
+ * While it runs, Stop cancels what has not been sent yet. It cannot recall
+ * an SMS already handed to the network, and says so rather than implying
+ * otherwise.
+ */
+function SendToBuildingCard({
+  buildingId,
+  valves,
+  onSent,
+}: {
+  buildingId: number;
+  valves: Valve[];
+  onSent: () => void;
+}) {
+  const { t } = useTranslation();
+  const [action, setAction] = useState<CommandAction>("on");
+  const [sending, setSending] = useState(false);
+  const [queued, setQueued] = useState<number[]>([]);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Live progress: how many of the commands we queued are still in flight.
+  const [done, setDone] = useState(0);
+  useEffect(() => {
+    if (queued.length === 0) return;
+    const ids = new Set(queued);
+    const settled = new Set<number>();
+    return onAppEvent("command:update", ({ command }) => {
+      if (!ids.has(command.id)) return;
+      if (command.status === "pending" || command.status === "sent") return;
+      settled.add(command.id);
+      setDone(settled.size);
+      if (settled.size === ids.size) {
+        setQueued([]);
+        onSent();
+      }
+    });
+  }, [queued, onSent]);
+
+  const valveIds = valves.map((v) => v.id);
+  const inFlight = queued.length > 0;
+
+  async function send() {
+    setSending(true);
+    setNotice(null);
+    setDone(0);
+    try {
+      const commands = await api.valves.queueBulkCommand(valveIds, action);
+      setQueued(commands.map((c) => c.id));
+      setNotice(t("queue.bulkQueued", { count: commands.length }));
+      onSent();
+    } catch (err) {
+      setNotice(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function stopAll() {
+    // Cancel newest-first: the ones still queued go without an SMS at all.
+    for (const id of [...queued].reverse()) {
+      await api.commands.cancel(id).catch(() => {});
+    }
+    setQueued([]);
+    setNotice(t("buildings.sendAllStopped"));
+    onSent();
+  }
+
+  return (
+    <Card className="p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <IconSend size={16} className="text-brand" />
+        <h2 className="text-sm font-semibold text-ink">{t("buildings.sendAllTitle")}</h2>
+      </div>
+      <p className="mb-4 mt-1 text-xs leading-relaxed text-ink-3">
+        {t("buildings.sendAllHint", { count: valveIds.length })}
+      </p>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {(["on", "off", "status"] as const).map((a) => (
+          <Button
+            key={a}
+            variant={action === a ? "primary" : "ghost"}
+            className="!px-3 !py-1.5 !text-xs"
+            disabled={inFlight}
+            onClick={() => setAction(a)}
+          >
+            {t(a === "status" ? "action.checkStatus" : `action.${a}`)}
+          </Button>
+        ))}
+        <Button className="!px-3 !py-1.5 !text-xs" disabled={sending || inFlight} onClick={send}>
+          {sending ? <IconSpinner size={13} /> : null}
+          {t("buildings.sendAll", { count: valveIds.length })}
+        </Button>
+        {inFlight && (
+          <Button variant="ghost" className="!px-3 !py-1.5 !text-xs" onClick={stopAll}>
+            <IconX size={13} />
+            {t("action.stopAll")}
+          </Button>
+        )}
+      </div>
+
+      {inFlight && (
+        <div className="mt-3">
+          <div className="mb-1 flex items-center justify-between text-xs text-ink-3">
+            <span>{t("buildings.sendAllProgress", { done, total: queued.length })}</span>
+            <span className="tabular-nums">
+              {Math.round((done / Math.max(1, queued.length)) * 100)}%
+            </span>
+          </div>
+          <div className="h-1.5 overflow-hidden rounded-full bg-hairline">
+            <div
+              className="h-full rounded-full bg-brand transition-all"
+              style={{ width: `${(done / Math.max(1, queued.length)) * 100}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {notice && <p className="mt-2 text-xs text-ink-3">{notice}</p>}
+    </Card>
   );
 }

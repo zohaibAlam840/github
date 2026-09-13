@@ -52,20 +52,52 @@ export function setUnauthorizedHandler(fn: (() => void) | null) {
   onUnauthorized = fn;
 }
 
+/**
+ * Two failures that are ROUTINE, not bugs.
+ *
+ * The session expiring, and the dev server restarting under a poller, both
+ * reject a fetch that nobody awaited — every screen fires timers, and there
+ * are ~35 of these call sites. Patching each with .catch() is churn that
+ * regresses the moment someone adds the 36th, so they are typed here and
+ * swallowed once at the boundary (app/providers.tsx). Anything NOT one of
+ * these still surfaces as a real unhandled rejection, which is the point.
+ */
+export class UnauthenticatedError extends Error {
+  constructor() {
+    super("UNAUTHENTICATED");
+    this.name = "UnauthenticatedError";
+  }
+}
+
+/** The dashboard server could not be reached at all — restarting, or down. */
+export class NetworkError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : String(cause));
+    this.name = "NetworkError";
+  }
+}
+
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(API_BASE + path, {
-    ...init,
-    headers: {
-      "Content-Type": "application/json",
-      ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
-      ...(init.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(API_BASE + path, {
+      ...init,
+      headers: {
+        "Content-Type": "application/json",
+        ...(authToken ? { Authorization: `Bearer ${authToken}` } : {}),
+        ...(init.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    // "TypeError: Failed to fetch" — the server is not answering. The next
+    // poll tick recovers on its own, so this must not read as a crash.
+    throw new NetworkError(err);
+  }
 
   if (res.status === 401) {
     setAuthToken(null);
     onUnauthorized?.();
-    throw new Error("UNAUTHENTICATED");
+    throw new UnauthenticatedError();
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}) as { error?: string });

@@ -41,3 +41,27 @@ export function normalizePhone(raw: string, countryCode = DEFAULT_COUNTRY_CODE):
   if (trimmed.startsWith("0")) return `${countryCode}${trimmed.slice(1)}`;
   return `${countryCode}${trimmed}`;
 }
+
+/**
+ * Does this look like a number a message can actually reach?
+ *
+ * Returns a problem key, or null when nothing is obviously wrong. It is a
+ * WARNING, not a gate: E.164 allows 15 digits and national plans vary, so
+ * refusing anything we do not recognise would block legitimate numbers in
+ * countries nobody has told us about. What it does catch is the typo that
+ * otherwise costs an SMS and then looks exactly like a dead gateway — most
+ * often a local number that picked up a country code it should not have,
+ * e.g. "03401588816" becoming "+9743401588816".
+ *
+ * Call it on the NORMALISED value, i.e. after normalizePhone().
+ */
+export function phoneProblem(e164: string): "tooShort" | "tooLong" | "qatarLength" | null {
+  const digits = e164.replace(/^\+/, "");
+  if (!/^\d+$/.test(digits)) return "tooShort";
+  // E.164: at most 15 digits including the country code.
+  if (digits.length > 15) return "tooLong";
+  if (digits.length < 8) return "tooShort";
+  // Qatar is the deployment country and is fixed-length, so we can be exact.
+  if (digits.startsWith("974") && digits.length !== 11) return "qatarLength";
+  return null;
+}

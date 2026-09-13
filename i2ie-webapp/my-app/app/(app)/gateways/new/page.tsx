@@ -11,7 +11,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
-import { normalizePhone } from "@/lib/phone";
+import { normalizePhone, phoneProblem } from "@/lib/phone";
 import type { Building, Gateway, PingResult, Unit } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
 import { Button, Card } from "@/components/ui";
@@ -105,8 +105,10 @@ function StepAddGateway({ onCreated }: { onCreated: (g: Gateway) => void }) {
   const { t } = useTranslation();
   const [label, setLabel] = useState("");
   const [sim, setSim] = useState("");
+  const simProblem = sim.trim() ? phoneProblem(normalizePhone(sim)) : null;
   const [authPassword, setAuthPassword] = useState("");
-  const [outputs, setOutputs] = useState<1 | 2>(2);
+  // One output, always — see the Gateways screen for the reasoning.
+  const outputs = 1 as const;
   const [saving, setSaving] = useState(false);
 
   async function submit(e: FormEvent) {
@@ -153,11 +155,19 @@ function StepAddGateway({ onCreated }: { onCreated: (g: Gateway) => void }) {
             value={sim}
             onChange={(e) => setSim(e.target.value)}
             onBlur={() => setSim((v) => normalizePhone(v))}
+            aria-invalid={simProblem !== null}
             placeholder="+9745xxxxxxx"
             dir="ltr"
             className={`${inputCls} font-mono`}
             required
           />
+          {/* A warning, not a block — see phoneProblem(). The typo it exists
+              to catch costs a real SMS and then looks like a dead gateway. */}
+          {simProblem && (
+            <p className="mt-1.5 text-xs leading-relaxed text-warn">
+              {t(`gateways.sim_${simProblem}`, { number: normalizePhone(sim) })}
+            </p>
+          )}
         </label>
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium text-ink-2">
@@ -172,19 +182,6 @@ function StepAddGateway({ onCreated }: { onCreated: (g: Gateway) => void }) {
             title={t("gateways.authPasswordHint")}
             className={`${inputCls} font-mono`}
           />
-        </label>
-        <label className="block">
-          <span className="mb-1.5 block text-sm font-medium text-ink-2">
-            {t("gateways.outputs")}
-          </span>
-          <select
-            value={outputs}
-            onChange={(e) => setOutputs(Number(e.target.value) as 1 | 2)}
-            className={inputCls}
-          >
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-          </select>
         </label>
         <Button type="submit" disabled={saving} className="w-full">
           {saving && <IconSpinner size={14} />}

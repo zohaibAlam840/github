@@ -14,7 +14,7 @@ import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import { fetchWorkerInbox } from "@/lib/workerStatus";
-import { normalizePhone, numbersMatch } from "@/lib/phone";
+import { normalizePhone, numbersMatch, phoneProblem } from "@/lib/phone";
 import type { Gateway, PingResult } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
 import { Button, Card, StatusChip, TimeAgo } from "@/components/ui";
@@ -297,8 +297,20 @@ function AddGatewayForm({ onAdded }: { onAdded: () => void }) {
   const { t } = useTranslation();
   const [label, setLabel] = useState("");
   const [sim, setSim] = useState("");
-  const [outputs, setOutputs] = useState<1 | 2>(2);
+  /*
+   * One output, always.
+   *
+   * This deployment drives the TRB141's LATCHING relay (11,12,13) and only
+   * that one — see the TRB141 Guide for why the plain relay is unsuitable
+   * for a supply cutoff. So there is nothing for a second output to control,
+   * and offering the choice only ever produced a V2 valve with nothing
+   * behind it. The database still supports two, so a future two-relay
+   * deployment needs no migration; the UI simply does not offer it.
+   */
+  const outputs = 1 as const;
   const [authPassword, setAuthPassword] = useState("");
+  // Warn, never block: we cannot know every country's numbering plan.
+  const simProblem = sim.trim() ? phoneProblem(normalizePhone(sim)) : null;
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -339,6 +351,7 @@ function AddGatewayForm({ onAdded }: { onAdded: () => void }) {
         placeholder="+9745xxxxxxx"
         dir="ltr"
         title={t("gateways.simHint")}
+        aria-invalid={simProblem !== null}
         className="min-w-40 rounded-lg border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-ink outline-none focus:border-brand"
         required
       />
@@ -352,20 +365,16 @@ function AddGatewayForm({ onAdded }: { onAdded: () => void }) {
         title={t("gateways.authPasswordHint")}
         className="min-w-36 rounded-lg border border-edge bg-surface px-3 py-1.5 font-mono text-sm text-ink outline-none focus:border-brand"
       />
-      <label className="flex items-center gap-1.5 text-xs text-ink-2">
-        {t("gateways.outputs")}
-        <select
-          value={outputs}
-          onChange={(e) => setOutputs(Number(e.target.value) as 1 | 2)}
-          className="rounded-lg border border-edge bg-surface px-2 py-1.5 text-sm text-ink outline-none focus:border-brand"
-        >
-          <option value={1}>1</option>
-          <option value={2}>2</option>
-        </select>
-      </label>
       <Button type="submit" className="!px-3 !py-1.5 !text-xs">
         {t("buildings.add")}
       </Button>
+      {/* Full-width so it drops onto its own line under the wrapped row.
+          A warning, not a block — see phoneProblem(). */}
+      {simProblem && (
+        <p className="w-full text-xs leading-relaxed text-warn">
+          {t(`gateways.sim_${simProblem}`, { number: normalizePhone(sim) })}
+        </p>
+      )}
     </form>
   );
 }

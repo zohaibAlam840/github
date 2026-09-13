@@ -272,6 +272,25 @@ function GatewayInboxScreen() {
             {t(rulesLive ? "gateways.rulesFromWorker" : "gateways.rulesFromSettings")}
           </span>
         </div>
+        {/*
+          Two outputs, one keyword.
+
+          {output} is what makes V1 and V2 different messages. Without it a
+          two-output gateway sends byte-identical SMS for both valves, so the
+          dashboard shows two independently controllable valves that actually
+          drive whichever single relay the rule is bound to. Everything looks
+          right — the send succeeds, the reply parses — and half the valves
+          are fiction. It is only visible if something says so.
+        */}
+        {gateway.numOutputs === 2 &&
+          ![kwOpen, kwClose, kwStatus].some((k) => k.includes("{output}")) && (
+            <div className="mb-3 rounded-lg border border-warn/40 bg-warn/10 p-3">
+              <p className="text-xs font-semibold text-warn">{t("gateways.sameKeywordTitle")}</p>
+              <p className="mt-1 text-xs leading-relaxed text-ink-2">
+                {t("gateways.sameKeywordBody", { keyword: kwOpen })}
+              </p>
+            </div>
+          )}
         <dl className="grid gap-3 sm:grid-cols-2">
           {outputs.map((n) => (
             <Fragment key={n}>

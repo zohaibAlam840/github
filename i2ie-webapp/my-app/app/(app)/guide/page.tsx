@@ -116,18 +116,29 @@ export default function GuidePage() {
         </div>
         <p className="mb-4 text-sm leading-relaxed text-ink-2">{t("guide.relayMapBody")}</p>
 
+        {/*
+          One output, and it is the LATCHING relay.
+
+          The TRB141 has two: Relay (3,4,5) and Latching Relay (11,12,13).
+          The plain relay needs coil power to stay switched, and the TRB is
+          powered from the building whose supply is being cut — so a power
+          blip releases it and an apartment that was cut off silently gets
+          water back, while the dashboard still shows it as cut. The latching
+          relay holds mechanically with no power, which is what a
+          set-and-leave supply cutoff actually requires.
+        */}
         <div className="mb-4 grid gap-3 sm:grid-cols-2">
           <OutputFlow
             label="V1"
             target={t("guide.relayOutput1Target")}
-            keywords="v1on / v1off"
+            keywords="valveon / valveoff"
             status="confirmed"
             note={t("guide.relayOutput1Note")}
           />
           <OutputFlow
-            label="V2"
+            label={t("guide.relayUnusedLabel")}
             target={t("guide.relayOutput2Target")}
-            keywords="v2on / v2off"
+            keywords="—"
             status="unverified"
             note={t("guide.relayOutput2Note")}
           />

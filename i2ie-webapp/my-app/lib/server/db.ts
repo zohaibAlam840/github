@@ -189,8 +189,51 @@ export function openDb(path: string): DatabaseSync {
   addMissingColumns(db);
   renameOpenClosedToOnOff(db);
   upgradeLegacyKeywords(db);
+  clampToSingleOutput(db);
   seedIfEmpty(db);
   return db;
+}
+
+/**
+ * Brings existing gateways down to one output.
+ *
+ * This deployment drives the TRB141's LATCHING relay (11,12,13) and only
+ * that one — the plain relay releases on a power cut, which on a supply
+ * cutoff means a disconnected apartment quietly gets its water back. The
+ * add-gateway forms no longer offer a choice, but rows created before that
+ * still say 2, and would keep offering a V2 with nothing behind it.
+ *
+ * A gateway that ACTUALLY has a valve wired to output 2 is left alone and
+ * warned about instead. Silently clamping it would orphan a real valve —
+ * worse than the inconsistency being fixed.
+ */
+function clampToSingleOutput(db: DatabaseSync) {
+  const twoOutput = db
+    .prepare("SELECT id, label FROM gateways WHERE num_outputs <> 1")
+    .all() as { id: number; label: string }[];
+  if (twoOutput.length === 0) return;
+
+  const inUse = db
+    .prepare("SELECT DISTINCT gateway_id AS id FROM valves WHERE output_index = 2")
+    .all() as { id: number }[];
+  const usingSecond = new Set(inUse.map((r) => r.id));
+
+  const clamped: string[] = [];
+  for (const gw of twoOutput) {
+    if (usingSecond.has(gw.id)) {
+      console.warn(
+        `[db] Gateway "${gw.label}" has a valve on output 2 and was left at 2 outputs. ` +
+          "This project uses only the latching relay — move or delete that valve, " +
+          "then restart to bring it down to one output."
+      );
+      continue;
+    }
+    db.prepare("UPDATE gateways SET num_outputs = 1 WHERE id = ?").run(gw.id);
+    clamped.push(gw.label);
+  }
+  if (clamped.length > 0) {
+    console.warn(`[db] Set ${clamped.length} gateway(s) to a single output: ${clamped.join(", ")}`);
+  }
 }
 
 /**

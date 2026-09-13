@@ -79,7 +79,8 @@
     "off": "Turn OFF",
     "checkStatus": "Check status now",
     "stop": "Stop",
-    "stopHint": "Stops waiting for the reply. If the SMS already went out the valve may still act — check the status afterwards."
+    "stopHint": "Stops waiting for the reply. If the SMS already went out the valve may still act — check the status afterwards.",
+    "stopAll": "Stop all"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -156,7 +157,15 @@
     "noResults": "No buildings or apartments match your search.",
     "noBuildingsYet": "No buildings yet. Add your first one to get started.",
     "filterOn": "Has ON",
-    "filterOff": "Has OFF"
+    "filterOff": "Has OFF",
+    "viewAllUnits": "View all {{count}} units",
+    "searchUnits": "Search units",
+    "noUnitsMatch": "No units match that search.",
+    "sendAllTitle": "Send to this whole building",
+    "sendAllHint": "One command to all {{count}} valves here — still one lane, one SMS at a time, exactly like a single command. Expect a few seconds per valve.",
+    "sendAll": "Send to all {{count}}",
+    "sendAllProgress": "{{done}} of {{total}} finished",
+    "sendAllStopped": "Stopped. Anything not yet sent was cancelled; messages already sent may still act."
   },
   "queue": {
     "inFlight": "Processing now",
@@ -220,7 +229,12 @@
     "sendNeedsPermission": "Viewer accounts can't send messages.",
     "sendWaiting": "Waiting for a reply… {{seconds}}s",
     "sendSeeChat": "Sent messages and any replies appear in the Inbox above.",
-    "simHint": "Type it any way you like — 0097466214698, 066214698 or +97466214698. It is corrected to international format when you leave the field."
+    "simHint": "Type it any way you like — 0097466214698, 066214698 or +97466214698. It is corrected to international format when you leave the field.",
+    "sim_tooShort": "{{number}} looks too short to be a real number — check it before saving.",
+    "sim_tooLong": "{{number}} is longer than any phone number can be (15 digits maximum).",
+    "sim_qatarLength": "{{number}} does not look right — a Qatar number is +974 followed by exactly 8 digits. If this SIM is in another country, type its full international number starting with + or 00.",
+    "sameKeywordTitle": "Both outputs send the same message",
+    "sameKeywordBody": "This gateway is set to 2 outputs, but the keywords contain no {output} placeholder — so V1 and V2 both send \"{{keyword}}\". The device cannot tell them apart, and the second valve will not be independently controllable. Either set this gateway to 1 output, or change the keywords in Settings to the per-output form (for example v{output}on) and add matching rules on the TRB141."
   },
   "logs": {
     "search": "Search valve / building / user…",
@@ -275,17 +289,17 @@
     "intro": "Everything a technician needs to configure a TRB141 gateway so it works with this dashboard — written from what's actually been bench-confirmed on real hardware, not just the Teltonika docs. Anything not yet verified is flagged as such.",
     "overviewTitle": "How this system uses the TRB141",
     "overviewBody": "Each TRB141 is one SIM-addressable gateway with up to 2 relay outputs — each relay drives one valve. There's no internet at the valve: every command and every status update travels as a plain SMS, in both directions. The dashboard never talks to the device directly — it queues a command, the worker (or the demo queue) sends the SMS, and the TRB141's own SMS Utilities rules do the rest.",
-    "relayMapTitle": "Relay outputs — what V1 and V2 mean",
-    "relayMapBody": "A gateway can drive up to two valves, one per relay output. This dashboard calls them V1 and V2 — that's the label you'll see next to a valve's code everywhere in the app. Each one maps to a specific target inside the TRB141's own SMS Utilities rules, and to the {output} placeholder in this dashboard's keyword pattern (Settings → SMS command keywords).",
-    "relayOutput1Target": "SMS Utilities target: \"Relay Output 1\"",
-    "relayOutput1Note": "This is the relay bench-confirmed on this project — physical terminals 3, 4, 5 on the unit we tested. valveon closes it, valveoff opens it.",
-    "relayOutput2Target": "SMS Utilities target: \"Relay Output 2\"",
-    "relayOutput2Note": "Supported the same way in this dashboard, but a second output hasn't been wired and confirmed end-to-end yet. Its physical terminal numbers can differ from Relay Output 1's — check this specific unit's SMS Utilities target list and terminal legend before wiring.",
-    "relayMapWarn": "A gateway only offers as many outputs as its \"Outputs\" field says when you added it (Gateways screen). Set it to 2 only once you've actually got a second relay output wired and configured — otherwise V2 will show up in the dashboard with nothing real behind it.",
+    "relayMapTitle": "Which relay drives the valve",
+    "relayMapBody": "The TRB141 has two relays, and this system uses ONE of them: the latching relay. Each gateway therefore drives one valve, labelled V1 wherever you see it in the app. The choice is not arbitrary — read the note under each one before wiring anything.",
+    "relayOutput1Target": "SMS Utilities target: \"Latching Relay\" — terminals 11 (NC), 12 (COM), 13 (NO)",
+    "relayOutput1Note": "A latching relay holds its position mechanically, with no power. That is what a supply cutoff needs: the TRB is powered from the same building whose water you are cutting, so the state has to survive a power failure. valveon closes it, valveoff opens it, iostatus reports it as %rl.",
+    "relayOutput2Target": "SMS Utilities target: \"Relay\" — terminals 3, 4, 5",
+    "relayOutput2Note": "The plain relay. Deliberately NOT used: it needs continuous coil power to stay switched, so a power cut releases it and an apartment you disconnected quietly gets its supply back while the dashboard still shows it as cut. Do not wire valves to 3, 4, 5 on this project.",
+    "relayMapWarn": "Leave a gateway's \"Outputs\" field at 1. One valve per TRB141, on the latching relay. The plain relay exists and can be wired, but nothing in this deployment should use it — see the note above for why.",
     "statusConfirmed": "Confirmed on our bench",
     "statusUnverified": "Not yet bench-verified",
     "relayTrapTitle": "Relay vs Configurable I/O — the #1 setup mistake",
-    "relayTrapBody": "The TRB141's web UI has two similarly-numbered, completely unrelated things: \"Relay (3,4,5)\" — the physical relay that actually switches the valve — and \"Configurable Input/Output (3)/(4)\" — DIO channels used for something else entirely. Every action or condition you configure must target the literal \"Relay\" option. Picking \"Configurable I/O\" by mistake wires the rule to nothing — the command will look like it worked but nothing physically moves.",
+    "relayTrapBody": "The TRB141's web UI has several similarly-numbered, completely unrelated things: \"Latching Relay (11,12,13)\" — what this project uses — \"Relay (3,4,5)\" — the non-latching one we deliberately avoid — and \"Configurable Input/Output (3)/(4)\", which are DIO channels for something else entirely and cannot switch a valve at all. Note that Relay and Configurable I/O both mention 3 and 4: they are NOT the same terminals. Every action you configure must target the literal \"Latching Relay\" option. Picking the wrong one wires the rule to nothing — the command will look like it worked but nothing physically moves.",
     "step1Title": "Step 1 — Create the open/close rules (SMS Utilities)",
     "step1Intro": "Services → SMS Utilities → SMS Utilities Configuration → add a rule. Repeat this twice, once per keyword:",
     "step1a": "Keyword — must match the \"Open keyword\" / \"Close keyword\" fields in this dashboard's Settings screen exactly, character for character.",
@@ -311,7 +325,8 @@
     "check2": "Configure the two SMS Utilities rules above (open/close, then status) — Ping depends on the status rule already replying, so this has to come first.",
     "check3": "Add the gateway here (Gateways → Add gateway, or the guided setup wizard) with its SIM number, then Ping it to confirm it actually answers SMS.",
     "check4": "Send a real Open or Close command from a valve's row and confirm the Queue shows a reply and the relay physically switches.",
-    "check5": "Only wire and trust real valves once that round-trip is confirmed — don't assume the dashboard's status is right until you've seen it happen."
+    "check5": "Only wire and trust real valves once that round-trip is confirmed — don't assume the dashboard's status is right until you've seen it happen.",
+    "relayUnusedLabel": "Not used"
   },
   "users": {
     "name": "Full name",
@@ -345,7 +360,10 @@
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago",
     "lastSent": "Last sent",
-    "close": "Close"
+    "close": "Close",
+    "previous": "Previous",
+    "next": "Next",
+    "pageOf": "Page {{page}} of {{total}}"
   },
   "stub": {
     "buildings": "Buildings → Units → Valves management: full CRUD tree, valve control buttons, bulk close per building/unit.",

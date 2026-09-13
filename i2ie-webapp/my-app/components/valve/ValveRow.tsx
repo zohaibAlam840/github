@@ -134,7 +134,13 @@ export function ValveRow({
           <div className="text-sm font-medium text-ink">{valve.valveCode}</div>
         )}
         <div className="text-xs text-ink-3">
-          {gateway ? `${gateway.label} · V${valve.outputIndex}` : "—"}
+          {/* The output suffix only means something when a gateway has two.
+              With one relay per TRB it is noise on every single row. */}
+          {gateway
+            ? gateway.numOutputs > 1
+              ? `${gateway.label} · V${valve.outputIndex}`
+              : gateway.label
+            : "—"}
         </div>
       </div>
 
@@ -273,7 +279,13 @@ export function ValveRow({
 
             <div className="flex items-center justify-between">
               <span className="text-xs text-ink-3">
-                {gateway ? `${gateway.label} · V${valve.outputIndex}` : "—"}
+                {/* The output suffix only means something when a gateway has two.
+              With one relay per TRB it is noise on every single row. */}
+          {gateway
+            ? gateway.numOutputs > 1
+              ? `${gateway.label} · V${valve.outputIndex}`
+              : gateway.label
+            : "—"}
               </span>
               <StatusChip status={modalCommand.status} />
             </div>

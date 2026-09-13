@@ -75,19 +75,20 @@ export function AddValveForm({
       </label>
       <label className="flex items-center gap-1.5 text-xs text-ink-2">
         {t("buildings.output")}
-        <select
-          value={output}
-          onChange={(e) => setOutput(Number(e.target.value) as 1 | 2)}
-          className={selectCls}
-        >
-          {Array.from({ length: gateway?.numOutputs ?? 1 }, (_, i) => i + 1).map(
-            (n) => (
+        {/* A select with one option is a decision nobody has to make. */}
+        {(gateway?.numOutputs ?? 1) > 1 ? (
+          <select
+            value={output}
+            onChange={(e) => setOutput(Number(e.target.value) as 1 | 2)}
+            className={selectCls}
+          >
+            {Array.from({ length: gateway?.numOutputs ?? 1 }, (_, i) => i + 1).map((n) => (
               <option key={n} value={n}>
                 V{n}
               </option>
-            )
-          )}
-        </select>
+            ))}
+          </select>
+        ) : null}
       </label>
       <Button type="submit" className="!px-3 !py-1.5 !text-xs">
         {t("buildings.add")}

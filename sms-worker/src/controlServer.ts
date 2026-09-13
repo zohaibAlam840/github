@@ -41,9 +41,9 @@ import { createServer, type IncomingMessage, type ServerResponse } from "node:ht
 import type { SmsTransport } from "./transports/types.js";
 import type { ModemSupervisor } from "./transports/supervisor.js";
 import { findUndrivenModems } from "./hardware/windowsPnp.js";
-import type { RelayState } from "./commands.js";
+import { normalizeNumber, type RelayState } from "./commands.js";
 import { dispatchAndTrack, getRecord } from "./confirmationTracker.js";
-import { getInbox } from "./inbox.js";
+import { getInbox, recordOutgoing } from "./inbox.js";
 import type { WorkerConfig } from "./config.js";
 
 function withCors(res: ServerResponse) {
@@ -164,6 +164,59 @@ export function startControlServer(config: WorkerConfig, supervisor: ModemSuperv
           );
         })
         .catch((err) => failed(res, "/hardware", err));
+      return;
+    }
+
+    if (req.method === "GET" && path === "/ports") {
+      supervisor
+        .ports()
+        .then((ports) => {
+          res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify({ ports }));
+        })
+        .catch((err) => failed(res, "/ports", err));
+      return;
+    }
+
+    // Sends ONE real SMS to a number the caller supplies, and reports what the
+    // modem said. Deliberately separate from /send: this proves the modem can
+    // reach the network, with no gateway, no keywords and no confirmation
+    // logic in the way — so when a valve command fails, this answers "is it
+    // the modem or is it the TRB?" in one click.
+    if (req.method === "POST" && path === "/test-sms") {
+      readJsonBody(req)
+        .then(async (body) => {
+          const { toNumber, text } = body as { toNumber?: string; text?: string };
+          if (!toNumber) {
+            res.writeHead(400, { "Content-Type": "application/json" }).end(
+              JSON.stringify({ error: "toNumber is required" })
+            );
+            return;
+          }
+          const live = requireTransport(res);
+          if (!live) {
+            console.warn(`[controlServer] /test-sms rejected: ${supervisor.health().reason}`);
+            return;
+          }
+
+          const to = normalizeNumber(toNumber);
+          const message = text?.trim() || `i2i test ${new Date().toISOString().slice(11, 19)}`;
+          console.log(`[controlServer] /test-sms "${message}" -> ${to}`);
+          const result = await live.send(to, message);
+          recordOutgoing(to, message);
+
+          res.writeHead(result.ok ? 200 : 502, { "Content-Type": "application/json" }).end(
+            JSON.stringify({
+              ok: result.ok,
+              toNumber: to,
+              text: message,
+              providerId: result.providerId ?? null,
+              // On failure this is already a sentence naming the likely cause
+              // and who can fix it — see describeAtError in serialModem.ts.
+              error: result.error ?? null,
+            })
+          );
+        })
+        .catch((err) => failed(res, "/test-sms", err));
       return;
     }
 

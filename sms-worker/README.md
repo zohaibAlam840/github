@@ -1,102 +1,136 @@
 # i2i SMS Worker
 
-The one piece of the i2i CMS that has to run physically in the office, on
-the same LAN as the phone/modem sending SMS to the TRB141 gateways —
-Supabase's cloud can't reach that phone's local IP, so this bridges the two.
+Runs on the office PC and owns the cellular modem. The dashboard talks to it
+over a small local HTTP API; it talks to the TRB141 field gateways by SMS.
 
-## What it does today
-
-- Sends SMS via the phone gateway app ("SMS Gateway for Android" by
-  capcom6, Local Server mode) — verified working end-to-end on the bench,
-  including real delivery-status tracking (Pending → Processed → Sent →
-  Delivered).
-- Implements the two-message confirmation pattern the TRB141 actually
-  needs: the `valveon`/`valveoff` action rule sends no reply, so a
-  follow-up `iostatus` command is sent and *its* reply (parsed from the
-  `%rb` relay placeholder) is the real confirmation. A plain status query
-  (the dashboard's "Refresh" button) is the exception — it already IS the
-  confirmation, so `confirmationTracker.ts`'s `dispatchAndTrack()` sends
-  it once, not the actuation pattern's two messages (that was a real bug:
-  Refresh used to send `iostatus` twice back-to-back for no reason).
-- Runs a small webhook listener so incoming replies can be captured
-  automatically instead of a human reading the phone screen.
-- Supports optional per-gateway password prefixing, for TRBs whose SMS
-  rules use "By router admin password" instead of "No authorization"
-  (format not yet bench-verified — see `src/commands.ts`).
-- `src/transports/serialModem.ts` — AT-command control (Hayes text-mode SMS:
-  `AT+CMGF=1`/`AT+CMGS`/`AT+CMGL`) for the SIM7600G or Robustel M1000 MP,
-  using `serialport`. Written against the documented command set but **not
-  yet run against real hardware** — treat it the same way the phone-gateway
-  path was treated before it was bench-verified: plug in the device, watch
-  the worker's console output, and confirm the prompt-handling / CMGL
-  parsing actually matches what that specific modem sends before trusting
-  it in production.
-- **Auto transport selection** (`src/transports/factory.ts`,
-  `src/transports/detect.ts`) — on startup the worker probes every serial
-  port on the machine with a plain `AT` command. If a router/modem answers,
-  that's used ("router" mode); if none does, it falls back to the mobile
-  phone gateway ("mobile" mode) automatically. Nothing is ever a
-  "simulated" transport — it's always one of these two real paths, chosen
-  based on what's actually plugged in. Override with `SMS_TRANSPORT=serial_modem`
-  or `SMS_TRANSPORT=phone_gateway` in `.env` to force one path (with
-  `COM_PORT` set for the serial case), or leave `SMS_TRANSPORT` unset/`auto`
-  for the automatic behavior. `GET /health` on the control server reports
-  which one is currently active (`{ transport: "router"|"mobile", detail,
-  comPort }`) — this is what the dashboard's Topbar polls to show the truth
-  instead of a hardcoded label.
-
-## What's still a stub
-
-- `src/queue.ts` — the actual Supabase-backed queue loop. Needs the
-  Supabase project before it can be written for real; see the TODO
-  comments in that file for exactly what it will do.
-
-## Setup
+Everything is local. There is no cloud service in the path, and the machine
+does not need internet — only cellular coverage and a SIM that can send SMS.
 
 ```
-cd sms-worker
+Dashboard (Next.js, localhost:3000)
+        |  HTTP, localhost:3900
+   this worker
+        |  AT commands over USB serial
+   SIM7600G-H modem
+        |  SMS over the mobile network
+   TRB141 gateway  ->  relay  ->  valve
+```
+
+## Requirements
+
+- **Node.js LTS, 64-bit.** `serialport` ships a prebuilt binary; a machine with
+  a different architecture would need a compiler, which the office PC does not
+  have. Check with `echo $env:PROCESSOR_ARCHITECTURE` — it must say `AMD64`.
+- **The modem's Windows driver.** Without it Windows creates **no COM port at
+  all**, so the modem is invisible to any software. For a SIM7600 that is the
+  SIMCom SIM7500/SIM7600 USB driver, followed by a reboot.
+- A SIM that is **allowed to send SMS and has credit**. This is not automatic:
+  many IoT/M2M SIMs are provisioned for data only, register on the network
+  perfectly, and refuse every message.
+
+## Install
+
+```powershell
 npm install
-cp .env.example .env   # fill in your phone gateway's IP/credentials
+npm run selftest        # no hardware needed - proves the code arrived intact
 ```
 
-## Manual bench testing (works today, no Supabase needed)
+Copy `.env.example` to `.env` and set what this installation needs. Every value
+has a working default; the worker runs with no `.env` at all, auto-detecting
+the modem.
 
-```
-npm run test-command -- 03401588816 open
-npm run test-command -- 03401588816 close
-```
+## Commands
 
-This sends the real two-message sequence to a real TRB141 and prints the
-parsed relay state — the same pipeline the queue loop will use once it's
-wired to Supabase.
+| | |
+|---|---|
+| `npm run worker` | The worker itself. |
+| `npm run diagnose` | Standalone hardware check — scans every port, tests whatever answers, prints a pass/fail report and writes the raw AT traffic to `data/`. Depends on nothing else; run it first on a new machine. |
+| `npm run diagnose -- COM8` | The same, against one port. |
+| `npm run test-command -- <sim> <open\|close\|status>` | Sends a real command to a real gateway from the command line. |
+| `npm run selftest` | Pure-logic assertions — number formats, reply parsing, UCS2 decoding, error codes. No hardware. |
 
-## Running the worker for real
+**Only one program can hold a COM port.** Stop the worker before running
+`diagnose`, and vice versa.
 
-```
-npm run worker
-```
+## First run on a new machine
 
-Currently starts the webhook listener and then reports that the queue loop
-isn't implemented yet (until Supabase credentials are added).
+1. `npm run selftest` — expect all tests to pass.
+2. `npm run diagnose` — read the report top to bottom. The lines that decide
+   everything are **SIM card**, **Signal**, **Network registration** and
+   **SMS centre**. A blank SMS centre makes every send fail silently.
+3. `npm run worker` — expect `Modem ready on COMn`.
+4. `npm run test-command -- <gateway-sim> status` — the real round trip.
 
-## Modem diagnostic (pre-check)
+`GET /health` reports exactly why nothing is working if any of that fails, and
+the dashboard's **SMS device** card (Settings) shows the same thing with
+buttons.
 
-Standalone check for whether this machine has a modem that can actually
-send and receive SMS. Run it before installing anything else — it has no
-dependency on `.env`, the transport, or any other part of the worker.
+## The API
 
-```
-npm run diagnose            # scan every port, test whatever answers
-npm run diagnose -- COM5    # test one specific port
-```
+All on `localhost:3900` by default. CORS is wide open because this only ever
+listens on a trusted local machine.
 
-It reports pass/fail on: modem detected, module identity, IMEI, SIM card,
-radio/flight mode, signal strength, network registration, operator, SMS
-text mode, SMS centre, message storage headroom, and character set.
+| Method | Path | |
+|---|---|---|
+| GET | `/health` | Modem state, and why. **Reads a cached snapshot — never touches the serial line.** Every dashboard tab polls this every 10s. |
+| GET | `/ports` | Every serial port, with the last scan's verdict. Enumeration only, no probing. |
+| GET | `/hardware` | USB devices Windows has no driver for — the only way to see a modem that has no COM port. |
+| POST | `/rescan` | Force a full re-detection. Drops the current modem first, so it can recover from "attached to the wrong port". |
+| POST | `/test-sms` | Send one SMS to any number. No gateway, no keywords — answers "modem or gateway?" in one call. |
+| POST | `/send` | Dispatch open/close/status to a gateway. Returns a tracking id immediately. |
+| POST | `/send-raw` | Send arbitrary text to a gateway. |
+| GET | `/status/:id` | Poll a dispatch. Replies can take minutes, so nothing holds a request open. |
+| GET | `/inbox` | Every SMS sent or received, newest first. |
 
-On Windows it also asks the OS about USB devices that have **no driver
-installed** — those create no COM port at all, so they are invisible to a
-port scan and would otherwise look like "nothing is plugged in".
+A request that needs the modem when none is available answers **503** with a
+plain-language reason, not a generic failure.
 
-Every line sent and received is written to `data/diagnose-<timestamp>.log`.
-Always ask for that file back when investigating a problem in the field.
+## How it behaves
+
+**It starts without a modem and keeps looking.** At boot, USB enumeration can
+easily lose the race against a service starting. Exiting would mean a machine
+that never recovers until somebody logs in.
+
+**Health checks never compete with real work.** A successful AT command within
+the last 15 seconds counts as proof of life and skips the probe entirely — real
+traffic is better evidence than a synthetic ping. Signal and registration are
+checked every 4th tick, SIM and storage every 20th.
+
+**Recovery is a ladder.** A port that vanishes is an immediate loss. Otherwise
+three failed probes trigger a close-and-reopen, which clears a wedged USB
+device surprisingly often, and only then does it give up and rescan.
+
+**Replies are pushed, not polled.** `AT+CNMI` makes the modem announce a new
+message the moment it lands. Not every module supports every form of that
+command, so the worker tries four and takes the first that is accepted; if none
+are, it falls back to sweeping, and shortens the sweep interval because the
+sweep is then the only path rather than a safety net.
+
+**Messages are deleted as they are read.** Storage holds about 20 messages on a
+SIM. Once it is full **the network silently stops delivering** — the system
+looks healthy and simply never receives another reply.
+
+## Files worth knowing
+
+| | |
+|---|---|
+| `src/transports/serialModem.ts` | The modem. AT framing, the send mutex, URC routing, UCS2 decoding, error translation. |
+| `src/transports/supervisor.ts` | Owns the modem for the life of the process, and is itself the transport the rest of the worker uses. |
+| `src/transports/detect.ts` | Finds a modem that can actually send SMS, not merely one that answers `AT`. |
+| `src/transports/health.ts` | What "is the modem there?" means: six states, each with a different action. |
+| `src/hardware/windowsPnp.ts` | Sees USB devices Windows has no driver for. |
+| `src/confirmationTracker.ts` | Dispatch-then-poll, because a round trip can take minutes. |
+| `src/commands.ts` | Number formats, keyword composition, reply interpretation. All configurable. |
+| `data/at-log.txt` | Every AT line in and out. **Ask for this file whenever something misbehaves in the field.** |
+
+## When something goes wrong
+
+1. `GET /health` — the `reason` field is written to be acted on, not decoded.
+2. `data/at-log.txt` — the raw traffic, including which `AT+CNMI` form the
+   module accepted.
+3. `npm run diagnose` — stop the worker first.
+
+See [`../docs/FIELD-TEST-2026-09-13.md`](../docs/FIELD-TEST-2026-09-13.md) for
+what real hardware actually did, including the failures and what they meant,
+and [`../docs/SIM7600G-H-REFERENCE.md`](../docs/SIM7600G-H-REFERENCE.md) for the
+AT commands themselves.

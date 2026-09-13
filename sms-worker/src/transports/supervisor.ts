@@ -24,7 +24,7 @@
 import { SerialPort } from "serialport";
 import type { WorkerConfig } from "../config.js";
 import { SerialModemTransport } from "./serialModem.js";
-import { detectModem, type ModemProbe } from "./detect.js";
+import { detectModem, NEVER_AT, type ModemProbe, type PortEntry } from "./detect.js";
 import {
   applyProbe,
   emptySnapshot,
@@ -130,6 +130,39 @@ export class ModemSupervisor implements SmsTransport {
   /** The cached state. Reading this performs no I/O — see rule 1 above. */
   health(): ModemSnapshot {
     return this.snapshot;
+  }
+
+  /**
+   * Every serial port on the machine, with what we know about each.
+   *
+   * Enumeration only — this deliberately does NOT probe. Opening the live
+   * modem's port to satisfy a dashboard refresh would interrupt a send, and
+   * opening a SIM7600's diagnostic port can hang. The rejection reasons come
+   * from the last real scan, which is where the interrogation belongs.
+   */
+  async ports(): Promise<
+    { comPort: string; label: string; active: boolean; skipped: boolean; reason: string | null }[]
+  > {
+    let listed: PortEntry[];
+    try {
+      listed = (await SerialPort.list()) as PortEntry[];
+    } catch {
+      return [];
+    }
+    return listed
+      .filter((p) => p.path)
+      .map((p) => {
+        const label = p.friendlyName ?? [p.manufacturer, p.pnpId].filter(Boolean).join(" ") ?? p.path;
+        return {
+          comPort: p.path,
+          label,
+          active: p.path === this.snapshot.comPort && this.transport !== null,
+          // Named so the dashboard can explain why a port was never tried,
+          // rather than leaving it looking overlooked.
+          skipped: NEVER_AT.test(label),
+          reason: this.rejected.get(p.path) ?? null,
+        };
+      });
   }
 
   async start() {
@@ -292,6 +325,10 @@ export class ModemSupervisor implements SmsTransport {
         sweepIntervalMs: this.config.sweepIntervalMs,
         rawLog: this.config.rawLog,
         smscOverride: this.config.smscOverride,
+        // Deliberately NOT purgeStorageOnStart: this is a mid-run recovery,
+        // and wiping storage every time a wedged port is reopened would
+        // destroy replies that arrived while it was down.
+        purgeStorageOnStart: false,
       });
       if (await reopened.waitUntilReady(12_000)) {
         this.transport = reopened;
@@ -379,6 +416,7 @@ export class ModemSupervisor implements SmsTransport {
       sweepIntervalMs: this.config.sweepIntervalMs,
       rawLog: this.config.rawLog,
       smscOverride: this.config.smscOverride,
+      purgeStorageOnStart: this.config.purgeStorageOnStart,
     });
 
     if (!(await transport.waitUntilReady(15_000))) {

@@ -188,9 +188,11 @@ export function createQueueEngine(repo: Repo) {
       const assumedStatus: ValveStatus = command.action === "open" ? "open" : "closed";
       logEvent("Command accepted by modem. Confirmation skipped (disabled in Settings) — not verified.");
       repo.updateCommand(command.id, { status: "unconfirmed", events });
-      repo.setValveStatus(valve.id, assumedStatus, true);
+      // Assumed, not verified: nothing replied. The valve row shows this
+      // as such until a Refresh actually confirms it.
+      repo.setValveStatus(valve.id, assumedStatus, true, false);
       finishValvePending(valve);
-      broadcast("valve:update", { valve: { ...valve, lastStatus: assumedStatus, pendingCommandId: null }, source: "reply" });
+      broadcast("valve:update", { valve: { ...valve, lastStatus: assumedStatus, statusVerified: false, pendingCommandId: null }, source: "reply" });
       logActivity("unconfirmed", valve, command.userName, command.action, assumedStatus);
       emitCommand({ ...command, status: "unconfirmed", events });
       return;
@@ -203,7 +205,7 @@ export function createQueueEngine(repo: Repo) {
       repo.setValveStatus(valve.id, "unknown", false);
       logEvent(`No reply after ${replyTimeoutMs}ms — giving up.`);
       finishValvePending(valve);
-      broadcast("valve:update", { valve: { ...valve, lastStatus: "unknown", pendingCommandId: null }, source: "timeout" });
+      broadcast("valve:update", { valve: { ...valve, lastStatus: "unknown", statusVerified: true, pendingCommandId: null }, source: "timeout" });
       logActivity("timeout", valve, command.userName, command.action, "unknown");
       emitCommand({ ...command, status: "no_response", events });
       return;
@@ -268,18 +270,20 @@ export function createQueueEngine(repo: Repo) {
         repo.setValveStatus(valve.id, record.relayState, true);
         if (valve.gatewayId) repo.setGatewayReachability(valve.gatewayId, "ok", true);
         finishValvePending(valve);
-        broadcast("valve:update", { valve: { ...valve, lastStatus: record.relayState, pendingCommandId: null }, source: "reply" });
+        broadcast("valve:update", { valve: { ...valve, lastStatus: record.relayState, statusVerified: true, pendingCommandId: null }, source: "reply" });
         logActivity("reply", valve, userName, action, record.relayState);
       } else if (record.status === "unconfirmed") {
         const assumedStatus: ValveStatus = action === "open" ? "open" : action === "close" ? "closed" : valve.lastStatus;
-        repo.setValveStatus(valve.id, assumedStatus, true);
+        // Assumed, not verified: nothing replied. The valve row shows this
+      // as such until a Refresh actually confirms it.
+      repo.setValveStatus(valve.id, assumedStatus, true, false);
         finishValvePending(valve);
-        broadcast("valve:update", { valve: { ...valve, lastStatus: assumedStatus, pendingCommandId: null }, source: "reply" });
+        broadcast("valve:update", { valve: { ...valve, lastStatus: assumedStatus, statusVerified: false, pendingCommandId: null }, source: "reply" });
         logActivity("unconfirmed", valve, userName, action, assumedStatus);
       } else if (record.status === "no_response") {
         repo.setValveStatus(valve.id, "unknown", false);
         finishValvePending(valve);
-        broadcast("valve:update", { valve: { ...valve, lastStatus: "unknown", pendingCommandId: null }, source: "timeout" });
+        broadcast("valve:update", { valve: { ...valve, lastStatus: "unknown", statusVerified: true, pendingCommandId: null }, source: "timeout" });
         logActivity("timeout", valve, userName, action, "unknown");
       } else {
         finishValvePending(valve);

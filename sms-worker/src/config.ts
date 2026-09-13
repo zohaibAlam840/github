@@ -57,6 +57,13 @@ export interface WorkerConfig {
   sweepIntervalMs: number;
   /** Write every AT line in and out to data/at-log.txt. */
   rawLog: boolean;
+  /**
+   * Clear modem/SIM message storage at startup. Off by default — it deletes
+   * messages this worker never received (operator notifications, anything a
+   * previous session left). A SIM holds only ~20, so a machine whose storage
+   * has silted up needs this once.
+   */
+  purgeStorageOnStart: boolean;
 }
 
 function num(name: string, fallback: number): number {
@@ -88,5 +95,6 @@ export function loadConfig(): WorkerConfig {
     healthTickMs: num("HEALTH_TICK_MS", 15_000),
     sweepIntervalMs: num("SWEEP_INTERVAL_MS", 120_000),
     rawLog: process.env.RAW_LOG !== "false",
+    purgeStorageOnStart: process.env.PURGE_STORAGE_ON_START === "true",
   };
 }

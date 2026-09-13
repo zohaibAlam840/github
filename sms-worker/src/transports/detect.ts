@@ -40,13 +40,14 @@ export interface ModemProbe {
 }
 
 /** friendlyName is Windows-only, so it is absent from the cross-platform type. */
-type PortEntry = Awaited<ReturnType<typeof SerialPort.list>>[number] & { friendlyName?: string };
+/** friendlyName is Windows-only, hence the intersection. Shared with the supervisor. */
+export type PortEntry = Awaited<ReturnType<typeof SerialPort.list>>[number] & { friendlyName?: string };
 
 /** Vendor IDs of cellular modules we recognise. SimTech (1E0E) is the SIM7600. */
 const MODEM_VENDORS = new Set(["1E0E", "2C7C", "1BC7", "12D1", "1546"]);
 
 /** Ports that are never the AT port. Opening the diagnostic port can hang. */
-const NEVER_AT = /bluetooth|nmea|diagnostic|diagnostics|audio|gps/i;
+export const NEVER_AT = /bluetooth|nmea|diagnostic|diagnostics|audio|gps/i;
 
 export interface DetectOptions {
   baudRate: number;

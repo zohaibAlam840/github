@@ -151,11 +151,30 @@ export function ValveRow({
           )}
         </span>
       ) : (
-        <StatusChip status={valve.lastStatus} />
+        <span className="inline-flex items-center gap-1.5">
+          <StatusChip status={valve.lastStatus} />
+          {/*
+            One-message dispatch means most states are what we COMMANDED, not
+            what the valve reported — the TRB's actuation rule never replies.
+            Saying so is the whole point: an unmarked chip would claim
+            certainty we do not have. Refresh sends a status query and clears
+            this.
+          */}
+          {!valve.statusVerified && valve.lastStatus !== "unknown" && (
+            <span
+              className="rounded-full border border-edge px-1.5 py-0.5 text-[10px] font-medium text-warn"
+              title={t("valve.assumedHint")}
+            >
+              {t("valve.assumed")}
+            </span>
+          )}
+        </span>
       )}
 
       <span className="text-xs text-ink-3">
-        {t("common.lastConfirmed")}: <TimeAgo iso={valve.lastSeenAt} />
+        {/* "Last confirmed" would be a lie for a state nothing confirmed. */}
+        {t(valve.statusVerified ? "common.lastConfirmed" : "common.lastSent")}:{" "}
+        <TimeAgo iso={valve.lastSeenAt} />
       </span>
 
       <span className="ms-auto flex items-center gap-2">

@@ -238,8 +238,8 @@
     "maxRetries": "Max retries",
     "replyTimeout": "Reply timeout (ms)",
     "confirmSection": "Confirming Open/Close",
-    "confirmHint": "Open and Close always send their command. With this on, a second status check follows to verify the valve actually moved — 2 SMS per command. Turn it off to send only the command and trust it worked — 1 SMS per command, but the result shows as \"Sent (unconfirmed)\" instead of a verified Open/Closed. A plain \"Check status\" always sends just one message either way.",
-    "confirmToggle": "Confirm with a status check after every Open/Close",
+    "confirmHint": "Open and Close always send their command. By default that is the only message sent — one SMS — and the valve is shown as assumed until a status check confirms it, because the gateway never replies to an open/close command. Turn this on to follow every command with an automatic status check: the state is then verified, at 2 SMS per command. A plain \"Check status\" sends one message either way.",
+    "confirmToggle": "Verify with a status check after every Open/Close (2 SMS)",
     "workerSection": "Local worker (bench testing)",
     "workerHint": "Set this to send commands for REAL through the local sms-worker instead of the in-browser demo queue. The worker finds the office modem on its own; the Topbar chip shows whether it can actually send. Leave blank to keep the demo behaviour with no hardware involved.",
     "workerUrl": "Worker URL",
@@ -315,7 +315,8 @@
     "justNow": "just now",
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
-    "daysAgo": "{{count}}d ago"
+    "daysAgo": "{{count}}d ago",
+    "lastSent": "Last sent"
   },
   "stub": {
     "buildings": "Buildings → Units → Valves management: full CRUD tree, valve control buttons, bulk close per building/unit.",
@@ -324,5 +325,54 @@
     "logs": "Full audit trail with filters and CSV export — every SMS sent and received, who did what, when.",
     "settings": "SMS keywords, reply mappings, send rate, retries, timeout, modem COM port, language.",
     "users": "User management: create accounts, assign Admin / Operator / Viewer roles."
+  },
+  "valve": {
+    "assumed": "assumed",
+    "assumedHint": "Sent, but not verified — the gateway does not reply to open/close commands. Press Refresh to check the actual state."
+  },
+  "device": {
+    "section": "SMS device",
+    "noWorkerUrl": "Set the worker address above to see the office modem here. Without it the dashboard runs on demo data and no SMS is sent.",
+    "loading": "Checking…",
+    "workerOffline": "The worker is not running, or is not reachable at {{url}}. Start it on the office PC before sending any command.",
+    "state": {
+      "ready": "Ready to send",
+      "degraded": "Working, with a problem",
+      "not_ready": "Modem found, but it cannot send",
+      "port_only": "A serial port answered, but it is not a modem",
+      "undriven": "A modem is plugged in, but Windows cannot use it",
+      "absent": "No modem found"
+    },
+    "driverMissing": "Driver missing",
+    "model": "Model",
+    "comPort": "COM port",
+    "imei": "IMEI",
+    "sim": "SIM card",
+    "sim_ready": "Ready",
+    "sim_absent": "Not detected",
+    "sim_pin_locked": "PIN-locked",
+    "sim_unknown": "Unknown",
+    "signal": "Signal",
+    "noSignal": "No signal — check the MAIN antenna",
+    "registration": "Network",
+    "reg_home": "Registered (home)",
+    "reg_roaming": "Registered (roaming)",
+    "reg_searching": "Searching",
+    "reg_denied": "Registration denied — check the SIM is active and paid",
+    "reg_none": "Not registered",
+    "reg_unknown": "Unknown",
+    "smsc": "SMS centre",
+    "storage": "Message storage",
+    "storageValue": "{{used}} of {{total}} used",
+    "portsHeading": "Serial ports on this computer",
+    "portActive": "in use",
+    "portSkipped": "not an AT port",
+    "rescan": "Rescan",
+    "testLabel": "Send a test SMS to",
+    "testSend": "Send test",
+    "testHint": "Sends one real SMS to any number, with no gateway or keywords involved. If a valve command fails, this tells you whether the modem or the gateway is at fault.",
+    "testSent": "Sent — the network accepted it (reference {{ref}}). Check the phone.",
+    "testFailed": "The test message could not be sent.",
+    "checkedAt": "Last checked at {{time}}"
   }
 }

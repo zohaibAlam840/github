@@ -52,6 +52,12 @@ export interface SerialModemConfig {
    * so this exists to fix that on site without a code change.
    */
   smscOverride?: string | null;
+  /**
+   * Delete every message in modem/SIM storage at startup. Off by default:
+   * it destroys messages this worker did not receive. Turn on once, on a
+   * machine whose storage has filled with operator notifications.
+   */
+  purgeStorageOnStart?: boolean;
 }
 
 /** Codes the modem sends unprompted. These can never be a command's answer. */
@@ -552,6 +558,7 @@ export class SerialModemTransport implements SmsTransport {
 
       // Anything that arrived while we were not listening.
       await this.exclusive(() => this.sweepUnread());
+      await this.exclusive(() => this.reportStaleStorage());
       this.startSweep();
     } catch (err) {
       this.log("--", `INIT FAILED: ${err instanceof Error ? err.message : err}`);
@@ -630,9 +637,59 @@ export class SerialModemTransport implements SmsTransport {
   /* ------------------------------------------------------------------ */
 
   /**
+   * Holds message parts that look like they belong to a longer message.
+   *
+   * Observed on the client's SIM: a message over one SMS arrives as SEVERAL
+   * storage records, each its own index, each its own +CMTI. Read naively,
+   * one reply reaches the dashboard as three fragments.
+   *
+   * Only LONG parts are held. A single SMS cannot exceed 160 characters, so
+   * anything near that ceiling is probably not the whole message, while a
+   * short body is complete by definition. That matters: a TRB relay reply is
+   * a dozen characters and must not be delayed by a buffering window it can
+   * never need.
+   */
+  private partial = new Map<string, { parts: string[]; timer: ReturnType<typeof setTimeout> }>();
+
+  /** Bodies at least this long are treated as possibly one part of several. */
+  private static readonly CONCAT_MIN_LEN = 140;
+  /** How long to wait for the next part before giving up and delivering. */
+  private static readonly CONCAT_WINDOW_MS = 6000;
+
+  private deliver(fromNumber: string, text: string) {
+    const msg: IncomingSms = { fromNumber, text, receivedAt: new Date() };
+    for (const h of [...this.handlers]) h(msg);
+  }
+
+  /** Applies the concatenation rule above, then delivers. */
+  private accept(from: string, text: string) {
+    const held = this.partial.get(from);
+
+    if (text.length < SerialModemTransport.CONCAT_MIN_LEN) {
+      if (!held) return this.deliver(from, text); // the common case: one short reply
+      // A short part after long ones is the tail of the message.
+      clearTimeout(held.timer);
+      this.partial.delete(from);
+      const joined = [...held.parts, text].join("");
+      this.log("--", `joined ${held.parts.length + 1} parts from ${from}`);
+      return this.deliver(from, joined);
+    }
+
+    if (held) clearTimeout(held.timer);
+    const parts = held ? [...held.parts, text] : [text];
+    const timer = setTimeout(() => {
+      this.partial.delete(from);
+      this.log("--", `concatenation window closed for ${from} (${parts.length} part(s))`);
+      this.deliver(from, parts.join(""));
+    }, SerialModemTransport.CONCAT_WINDOW_MS);
+    timer.unref?.();
+    this.partial.set(from, { parts, timer });
+  }
+
+  /**
    * Reads one message by index, hands it to the listeners, then deletes it.
-   * Deleting is not housekeeping — storage holds only 40-50 messages, and a
-   * full store makes the network stop delivering with no error at all.
+   * Deleting is not housekeeping — storage holds only 20 messages on a SIM,
+   * and a full store makes the network stop delivering with no error at all.
    */
   private async readAndDelete(index: number) {
     try {
@@ -654,10 +711,7 @@ export class SerialModemTransport implements SmsTransport {
       // parser, the Inbox and the activity trail all read the same string.
       const text = decodeUcs2(body.join("\n").trim());
 
-      if (from && text) {
-        const msg: IncomingSms = { fromNumber: from, text, receivedAt: new Date() };
-        for (const h of this.handlers) h(msg);
-      }
+      if (from && text) this.accept(from, text);
 
       await this.tryCommand(`AT+CMGD=${index}`);
     } catch (err) {
@@ -674,6 +728,46 @@ export class SerialModemTransport implements SmsTransport {
       if (m) indices.push(Number(m[1]));
     }
     for (const index of indices) await this.readAndDelete(index);
+  }
+
+  /**
+   * Reports — and optionally clears — messages this worker will never remove.
+   *
+   * We read unread messages and delete each one as we go, so anything left
+   * marked READ was put there by something else: the operator's own
+   * notifications, or a session before we arrived. Nothing in the normal flow
+   * ever removes those, and on a SIM holding twenty messages a handful of
+   * permanent residents is a real fraction of the headroom. Once storage
+   * fills, the network stops delivering and replies simply stop, with no
+   * error anywhere.
+   *
+   * Clearing is opt-in (PURGE_STORAGE_ON_START) because it destroys messages
+   * that are not ours to destroy. Saying clearly what is there, and how to
+   * clear it, is the safe default.
+   */
+  private async reportStaleStorage() {
+    const lines = await this.tryCommand("AT+CPMS?");
+    const m = lines.join(" ").match(/\+CPMS:\s*"([^"]*)",(\d+),(\d+)/i);
+    if (!m) return;
+
+    const [, store, usedRaw, totalRaw] = m;
+    const used = Number(usedRaw);
+    const total = Number(totalRaw);
+    if (used === 0) return;
+
+    if (this.config.purgeStorageOnStart) {
+      console.warn(`[serialModem] Clearing ${used} message(s) from ${store} storage (PURGE_STORAGE_ON_START).`);
+      await this.tryCommand("AT+CMGD=1,4", 15_000);
+      return;
+    }
+
+    const pct = total > 0 ? Math.round((used / total) * 100) : 0;
+    console.warn(
+      `[serialModem] ${used} of ${total} ${store} message slots (${pct}%) are used by messages this ` +
+        "worker did not receive and will never delete — usually operator notifications.\n" +
+        "  They stay forever, and once storage fills the network stops delivering replies with no error.\n" +
+        "  Set PURGE_STORAGE_ON_START=true once to clear them, then unset it."
+    );
   }
 
   private startSweep() {

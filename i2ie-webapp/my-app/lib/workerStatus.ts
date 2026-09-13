@@ -48,6 +48,110 @@ export async function fetchWorkerHealth(
   }
 }
 
+/** The full modem snapshot — sms-worker/src/transports/health.ts. */
+export interface ModemSnapshot {
+  state: ModemState;
+  reason: string;
+  checkedAt: string;
+  comPort: string | null;
+  model: string | null;
+  manufacturer: string | null;
+  imei: string | null;
+  sim: "ready" | "absent" | "pin_locked" | "unknown" | null;
+  registration: "home" | "roaming" | "searching" | "denied" | "none" | "unknown" | null;
+  signal: number | null;
+  smsc: string | null;
+  storage: { used: number; total: number } | null;
+  failures: number;
+  lastSuccessAt: string | null;
+}
+
+/** A USB device Windows has no working driver for — sms-worker/src/hardware/windowsPnp.ts. */
+export interface UndrivenDevice {
+  instanceId: string;
+  message: string;
+}
+
+export interface PortInfo {
+  comPort: string;
+  label: string;
+  /** The modem is currently attached to this one. */
+  active: boolean;
+  /** Never probed: a diagnostic/NMEA/audio port is never the AT port. */
+  skipped: boolean;
+  /** Why the last scan rejected it, if it did. */
+  reason: string | null;
+}
+
+async function getJson<T>(url: string, timeoutMs = 8000): Promise<T | null> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    const res = await fetch(url, { signal: controller.signal });
+    clearTimeout(timer);
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
+/** Serial ports on the office PC, with the last scan's verdict for each. */
+export function fetchPorts(workerUrl: string) {
+  return getJson<{ ports: PortInfo[] }>(`${workerUrl}/ports`);
+}
+
+/** USB devices Windows cannot use, plus the current modem snapshot. */
+export function fetchHardware(workerUrl: string) {
+  return getJson<{ undriven: UndrivenDevice[]; modem: ModemSnapshot }>(`${workerUrl}/hardware`, 20_000);
+}
+
+/** Forces a full re-detection. Drops the current modem first — see supervisor.rescan(). */
+export async function triggerRescan(workerUrl: string): Promise<ModemSnapshot | null> {
+  try {
+    const res = await fetch(`${workerUrl}/rescan`, { method: "POST" });
+    if (!res.ok) return null;
+    return (await res.json()) as ModemSnapshot;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Sends one real SMS to an arbitrary number. No gateway, no keywords, no
+ * confirmation logic — so when a valve command fails this answers "is it the
+ * modem or is it the TRB?" without a terminal.
+ */
+export async function runTestSms(
+  workerUrl: string,
+  toNumber: string,
+  text?: string
+): Promise<{ ok: boolean; error: string | null; providerId: string | null }> {
+  try {
+    const res = await fetch(`${workerUrl}/test-sms`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ toNumber, text }),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      ok?: boolean;
+      error?: string;
+      reason?: string;
+      providerId?: string | null;
+    };
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: [body.error, body.reason].filter(Boolean).join(" — ") || `HTTP ${res.status}`,
+        providerId: null,
+      };
+    }
+    return { ok: body.ok ?? false, error: body.error ?? null, providerId: body.providerId ?? null };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err), providerId: null };
+  }
+}
+
 /** One SMS the worker has sent or received — see sms-worker/src/inbox.ts. */
 export interface InboxMessage {
   id: number;

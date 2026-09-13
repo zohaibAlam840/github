@@ -2,7 +2,7 @@
   "name": "i2i-sms-worker",
   "version": "0.1.0",
   "private": true,
-  "description": "Local SMS-bridge worker for the i2i CMS. Runs on the office LAN (not in the cloud) because it must reach the phone/modem gateway's local IP. Bridges Supabase (command queue) <-> office SMS transport (phone gateway or serial modem) <-> TRB141 field gateways.",
+  "description": "Office-side worker for the i2i CMS. Owns the SIM7600 modem on a COM port and exposes it to the local dashboard over HTTP; sends and receives the SMS that drive the TRB141 field gateways. Runs entirely offline.",
   "type": "module",
   "scripts": {
     "worker": "tsx --env-file=.env src/index.ts",

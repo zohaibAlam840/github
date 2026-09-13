@@ -72,6 +72,14 @@ export interface Valve {
   outputIndex: 1 | 2; // which relay on the gateway drives it
   valveCode: string; // human label, e.g. "SN0001"
   lastStatus: ValveStatus;
+  /**
+   * Whether lastStatus was confirmed by a real TRB reply, or is only what we
+   * assume after sending the command. With one-message dispatch
+   * (Settings.confirmAfterCommand = false) assumed is the normal case, so the
+   * UI must show the difference — a confident open/closed that nothing
+   * verified is exactly the kind of claim this project does not make.
+   */
+  statusVerified: boolean;
   lastSeenAt: string | null; // when we last got a confirmed reply/push
   pendingCommandId: number | null; // set while a command is in flight
 }

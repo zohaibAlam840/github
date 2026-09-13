@@ -188,6 +188,8 @@ export function createRepo(db: DatabaseSync) {
       outputIndex: r.output_index,
       valveCode: r.valve_code,
       lastStatus: r.last_status,
+      // SQLite has no boolean; the column is 0/1.
+      statusVerified: r.status_verified !== 0,
       lastSeenAt: r.last_seen_at,
       pendingCommandId: r.pending_command_id,
     };
@@ -225,6 +227,7 @@ export function createRepo(db: DatabaseSync) {
       outputIndex,
       valveCode,
       lastStatus: "unknown",
+      statusVerified: true, // "unknown" is not a claim, so nothing is unverified about it
       lastSeenAt: null,
       pendingCommandId: null,
     };
@@ -238,11 +241,24 @@ export function createRepo(db: DatabaseSync) {
     db.prepare("UPDATE valves SET pending_command_id = ? WHERE id = ?").run(commandId, id);
   }
 
-  function setValveStatus(id: number, status: ValveStatus, seen: boolean) {
+  /**
+   * @param seen      bump last_seen_at — we heard from the device just now.
+   * @param verified  did a real TRB reply confirm this status, or are we
+   *                  assuming it because we sent the command? Defaults to
+   *                  true so every existing caller keeps its meaning; the
+   *                  one-message path passes false explicitly.
+   */
+  function setValveStatus(id: number, status: ValveStatus, seen: boolean, verified = true) {
+    const flag = verified ? 1 : 0;
     if (seen) {
-      db.prepare("UPDATE valves SET last_status = ?, last_seen_at = ? WHERE id = ?").run(status, now(), id);
+      db.prepare("UPDATE valves SET last_status = ?, status_verified = ?, last_seen_at = ? WHERE id = ?").run(
+        status,
+        flag,
+        now(),
+        id
+      );
     } else {
-      db.prepare("UPDATE valves SET last_status = ? WHERE id = ?").run(status, id);
+      db.prepare("UPDATE valves SET last_status = ?, status_verified = ? WHERE id = ?").run(status, flag, id);
     }
   }
 

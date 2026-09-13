@@ -22,7 +22,18 @@ export const DEFAULT_SETTINGS: Settings = {
   sendGapMs: 2200,
   maxRetries: 2,
   replyTimeoutMs: 7000,
-  confirmAfterCommand: true,
+  // One SMS per command, not two.
+  //
+  // A TRB141 "Change I/O state" rule never replies, so verifying an
+  // open/close means sending a second "status" message behind it. That
+  // doubles SMS cost on what is a prepaid SIM, and doubles time on the one
+  // serial line the health checks also share.
+  //
+  // The trade is real and is made visible rather than hidden: a command
+  // resolves as "unconfirmed", and the valve's state is marked as assumed
+  // until a Refresh actually verifies it. Operators who would rather pay for
+  // certainty can turn this back on in Settings.
+  confirmAfterCommand: false,
   smsTransport: "serial_modem",
   comPort: null,
   workerUrl: null,
@@ -91,6 +102,13 @@ export function openDb(path: string): DatabaseSync {
       valve_code TEXT NOT NULL,
       last_status TEXT NOT NULL DEFAULT 'unknown',
       last_seen_at TEXT,
+      -- Did a real TRB reply confirm last_status, or are we assuming it
+      -- because we sent the command and nothing came back to contradict us?
+      -- With one-message dispatch (Settings.confirmAfterCommand = false) the
+      -- assumed case is the NORMAL one, so the distinction has to be stored
+      -- rather than inferred — otherwise the dashboard shows a confident
+      -- open/closed that nothing ever verified.
+      status_verified INTEGER NOT NULL DEFAULT 1,
       pending_command_id INTEGER
     );
 
@@ -130,8 +148,35 @@ export function openDb(path: string): DatabaseSync {
     );
   `);
 
+  addMissingColumns(db);
   seedIfEmpty(db);
   return db;
+}
+
+/**
+ * Adds columns introduced after a database was first created.
+ *
+ * CREATE TABLE IF NOT EXISTS silently does nothing on an existing file, so a
+ * new column in the schema above would never reach a database that already
+ * exists — the office PC's, after the first deployment. SQLite has no
+ * "ADD COLUMN IF NOT EXISTS", so each one is checked against the table info
+ * first. Adding a column is the only migration shape this needs; anything
+ * more involved should become a real versioned migration.
+ */
+function addMissingColumns(db: DatabaseSync) {
+  const additions: { table: string; column: string; ddl: string }[] = [
+    {
+      table: "valves",
+      column: "status_verified",
+      ddl: "ALTER TABLE valves ADD COLUMN status_verified INTEGER NOT NULL DEFAULT 1",
+    },
+  ];
+
+  for (const { table, column, ddl } of additions) {
+    const existing = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (existing.some((c) => c.name === column)) continue;
+    db.exec(ddl);
+  }
 }
 
 function seedIfEmpty(db: DatabaseSync) {

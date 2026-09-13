@@ -18,6 +18,7 @@ import { api } from "@/lib/api";
 import type { Settings } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
 import { Button, Card, Field } from "@/components/ui";
+import { SmsDeviceCard } from "@/components/settings/SmsDeviceCard";
 import { IconRadio, IconTrash } from "@/components/icons";
 
 export default function SettingsPage() {
@@ -225,6 +226,10 @@ function SettingsScreen() {
       </Card>
 
       <Button type="submit">{t("settings.save")}</Button>
+
+      {/* Live modem state. Outside the save form: it reports and acts on the
+          worker directly, nothing here is a saved setting. */}
+      <SmsDeviceCard workerUrl={settings.workerUrl} />
 
       {/* Danger zone — outside the save form on purpose, its own action */}
       <Card className="border-critical/30 p-5">

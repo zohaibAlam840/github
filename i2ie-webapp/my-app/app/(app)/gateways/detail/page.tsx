@@ -249,7 +249,18 @@ function GatewayDetailScreen() {
                         {building && unit ? ` · ${building.name} · ${unit.name}` : ""}
                       </div>
                     </div>
-                    <StatusChip status={valve.lastStatus} />
+                    <span className="inline-flex items-center gap-1.5">
+                      <StatusChip status={valve.lastStatus} />
+                      {/* Same rule as ValveRow: never show an assumed state as certain. */}
+                      {!valve.statusVerified && valve.lastStatus !== "unknown" && (
+                        <span
+                          className="rounded-full border border-edge px-1.5 py-0.5 text-[10px] font-medium text-warn"
+                          title={t("valve.assumedHint")}
+                        >
+                          {t("valve.assumed")}
+                        </span>
+                      )}
+                    </span>
                   </Link>
                 </li>
               );

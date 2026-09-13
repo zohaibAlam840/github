@@ -1,0 +1,13 @@
+node_modules/
+
+# One installation's COM port, SMS centre and keywords. Differs between the
+# bench and the client, so it never travels with the code — .env.example
+# documents every setting and IS committed.
+.env
+.env.*
+!.env.example
+
+# Real phone numbers, real message bodies, and the raw AT traffic log.
+# Worth asking a client to send back when something goes wrong in the field;
+# never worth committing. See src/inbox.ts and transports/serialModem.ts.
+data/

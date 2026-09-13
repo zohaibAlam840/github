@@ -1,0 +1,115 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens — cool-neutral "professional SaaS" palette (brand blue +
+ * cool grays), derived from the dataviz skill's palette method: only the
+ * chrome/ink/brand slots were re-picked here (contrast-checked against the
+ * new surfaces — see chat for the actual ratios computed), NOT the status
+ * colors below, which stay at the skill's validated, reserved values.
+ * Status colors are RESERVED for state (valve/command/gateway status) and
+ * always ship with an icon + label, never color alone — never re-themed
+ * alongside a brand refresh, since their sub-3:1 contrast on light is
+ * deliberate and already mitigated by that icon+label pairing.
+ */
+:root {
+  --plane: #f5f6f9; /* page background */
+  --surface: #ffffff; /* cards, sidebar */
+  --ink: #14161a; /* primary text */
+  --ink-2: #5b5f6b; /* secondary text */
+  --ink-3: #90939d; /* muted text (labels, timestamps) */
+  --hairline: #e6e8ee; /* gridlines / dividers */
+  --border: rgba(20, 22, 26, 0.08);
+
+  --brand: #3d5fe0; /* actions, active nav, links — 5.37:1 on white */
+  --brand-strong: #2e4bc7;
+
+  --status-good: #0ca30c; /* open / success / reachable */
+  --status-warn: #fab219; /* unknown (stale state, attention) */
+  --status-serious: #ec835a; /* no_response */
+  --status-critical: #d03b3b; /* failed / unreachable */
+  --good-text: #006300; /* success text on light surface */
+}
+
+/*
+ * Dark values declared under BOTH scopes, per the theme-toggle pattern:
+ * the media query covers an unset OS preference; the [data-theme] scope
+ * covers the explicit toggle (lib/theme.ts), which must win either way —
+ * :not([data-theme="light"]) lets a light stamp beat OS-dark, and the
+ * dedicated [data-theme="dark"] block lets a dark stamp beat OS-light.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --plane: #0e0f13;
+    --surface: #17181d;
+    --ink: #ffffff;
+    --ink-2: #c3c6d0;
+    --ink-3: #8b8fa0;
+    --hairline: #2a2c34;
+    --border: rgba(255, 255, 255, 0.1);
+
+    --brand: #5478ee; /* balances text-on-surface (4.47:1) vs white-on-button (3.96:1) */
+    --brand-strong: #7a9af5;
+
+    --good-text: #0ca30c;
+  }
+}
+
+:root[data-theme="dark"] {
+  --plane: #0e0f13;
+  --surface: #17181d;
+  --ink: #ffffff;
+  --ink-2: #c3c6d0;
+  --ink-3: #8b8fa0;
+  --hairline: #2a2c34;
+  --border: rgba(255, 255, 255, 0.1);
+
+  --brand: #5478ee;
+  --brand-strong: #7a9af5;
+
+  --good-text: #0ca30c;
+}
+
+@theme inline {
+  --color-plane: var(--plane);
+  --color-surface: var(--surface);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-hairline: var(--hairline);
+  --color-edge: var(--border);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-good: var(--status-good);
+  --color-warn: var(--status-warn);
+  --color-serious: var(--status-serious);
+  --color-critical: var(--status-critical);
+  --color-good-text: var(--good-text);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --animate-pop-in: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes pop-in {
+  0% {
+    transform: scale(0.5);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+body {
+  background: var(--plane);
+  color: var(--ink);
+  font-family:
+    var(--font-geist-sans),
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    sans-serif;
+}

@@ -1,0 +1,86 @@
+# What ships, and what does not.
+#
+# Only two folders are needed on the client's office PC:
+#
+#   sms-worker/            the modem worker
+#   i2ie-webapp/my-app/    the dashboard
+#
+# Everything else in this directory is ours — working notes, generated
+# output, client paperwork, and the pre-SIM7600 backup. A clone of this
+# repository should be the deployable system and nothing else, so that
+# copying it to a machine we do not own carries no surprises.
+#
+# Anchored patterns (a leading "/") match only at the top level, on purpose:
+# "/image.png" is a stray screenshot here, but public/assests/image.png is a
+# real dashboard asset and must keep shipping.
+
+# ---------------------------------------------------------------------------
+# Installed and generated — rebuilt on the target machine, never copied
+# ---------------------------------------------------------------------------
+node_modules/
+.next/
+out/
+dist/
+build/
+*.tsbuildinfo
+next-env.d.ts
+
+# ---------------------------------------------------------------------------
+# Machine-specific configuration
+#
+# .env holds one installation's COM port, SMS centre and keywords. It is the
+# file that differs between the bench and the client, so it must never travel
+# with the code. .env.example is committed and documents every setting.
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Runtime data — real phone numbers, real message bodies, raw AT traffic
+#
+# sms-worker/data/ accumulates inbox.json, at-log.txt and the timestamped
+# diagnostic logs. Useful to ask for when something goes wrong in the field;
+# never something to commit. See sms-worker/src/inbox.ts.
+# ---------------------------------------------------------------------------
+data/
+*.log
+
+# ---------------------------------------------------------------------------
+# The pre-SIM7600 backup of the phone-gateway build. Kept on disk on purpose
+# as a fallback reference; deliberately not shipped or tracked.
+# ---------------------------------------------------------------------------
+verone/
+
+# ---------------------------------------------------------------------------
+# Generated code graph — rebuild with `graphify update .`
+# ---------------------------------------------------------------------------
+graphify-out/
+
+# ---------------------------------------------------------------------------
+# Client paperwork and stray captures at the repo root. Large, and no part of
+# the running system.
+# ---------------------------------------------------------------------------
+/*.zip
+/*.pdf
+/*.docx
+/*.xlsx
+/*.pptx
+/*.png
+/*.jpg
+/*.jpeg
+/i2i-CMS-stress-test-report.html
+
+# ---------------------------------------------------------------------------
+# Editor, tooling and OS noise
+# ---------------------------------------------------------------------------
+.claude/
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Ad-hoc AT test scripts written while working on a client machine.
+*.ps1

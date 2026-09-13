@@ -49,6 +49,29 @@ export function createRepo(db: DatabaseSync) {
     return db.prepare("SELECT id, name, username, role FROM users ORDER BY id").all() as unknown as User[];
   }
 
+  /**
+   * Change one user's password.
+   *
+   * `currentPassword` is required when someone changes their OWN password and
+   * omitted when an admin resets another account's — an admin who has to know
+   * the old password cannot help a user who has forgotten it, which is the
+   * only situation a reset exists for. Callers decide which case applies; the
+   * route enforces who may do what.
+   *
+   * Throws rather than returning false so a wrong current password can never
+   * be mistaken for success by a caller that forgot to check a boolean.
+   */
+  function changePassword(id: number, newPassword: string, currentPassword?: string) {
+    const row = db.prepare("SELECT * FROM users WHERE id = ?").get(id) as
+      | { id: number; password_hash: string }
+      | undefined;
+    if (!row) throw new Error("USER_NOT_FOUND");
+    if (currentPassword !== undefined && !verifyPassword(currentPassword, row.password_hash)) {
+      throw new Error("WRONG_PASSWORD");
+    }
+    db.prepare("UPDATE users SET password_hash = ? WHERE id = ?").run(hashPassword(newPassword), id);
+  }
+
   function createUser(name: string, username: string, password: string, role: Role): User {
     if (findUserByUsername(username)) throw new Error("USERNAME_TAKEN");
     const info = db
@@ -547,6 +570,7 @@ export function createRepo(db: DatabaseSync) {
     verifyLogin,
     listUsers,
     createUser,
+    changePassword,
     deleteUser,
     listBuildings,
     createBuilding,

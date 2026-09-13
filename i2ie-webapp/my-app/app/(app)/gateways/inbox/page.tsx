@@ -243,8 +243,8 @@ function GatewayInboxScreen() {
       {/* Chat panel lives in its own right-hand column (same sticky-sidebar
           pattern as the Queue screen's Bulk send panel), not stacked below
           everything else in the main flow. */}
-      <div className="grid gap-4 xl:grid-cols-3">
-      <div className="space-y-4 xl:col-span-2">
+      <div className="grid gap-4 lg:grid-cols-5">
+      <div className="space-y-4 lg:col-span-3">
 
       <div>
         <h1 className="text-lg font-semibold text-ink">{gateway.label}</h1>
@@ -351,8 +351,15 @@ function GatewayInboxScreen() {
 
       </div>
 
-      <div className="xl:col-span-1">
-      <Card className="sticky top-4 flex max-h-[calc(100vh-6rem)] flex-col">
+      <div className="lg:col-span-2">
+      {/*
+        Height, not just max-height. With only max-height a two-message
+        thread collapsed to a stub while the page scrolled past it; a
+        conversation wants a stable frame you scroll INSIDE. min-h keeps it
+        usable on a short window, and on mobile it stops the chat eating the
+        whole viewport before you reach the composer.
+      */}
+      <Card className="sticky top-4 flex h-[min(32rem,calc(100vh-8rem))] min-h-80 flex-col lg:h-[calc(100vh-6rem)]">
         <div className="flex flex-col gap-1.5 border-b border-hairline px-5 py-3.5">
           <div className="flex items-center gap-2">
             <IconMail size={15} className="text-ink-3" />
@@ -371,23 +378,38 @@ function GatewayInboxScreen() {
             {t("gateways.inboxEmpty")}
           </p>
         ) : (
-          <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-5">
+          <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4 sm:p-5">
             {inbox.map((msg) => {
               const sent = msg.direction === "sent";
               return (
                 <div key={msg.id} className={`flex ${sent ? "justify-end" : "justify-start"}`}>
                   <div
-                    className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                    className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 shadow-sm sm:max-w-[80%] ${
                       sent
-                        ? "rounded-br-sm bg-brand text-white"
-                        : "rounded-bl-sm bg-hairline/60 text-ink"
+                        ? "rounded-br-md bg-brand text-white"
+                        : "rounded-bl-md border border-edge bg-surface text-ink"
                     }`}
                   >
-                    <div className="font-mono text-sm" dir="ltr">
+                    {/*
+                      Say which way it went. Colour and side alone fail the
+                      moment someone reads this on a phone, in Arabic (where
+                      the page mirrors), or in a screenshot pasted into a
+                      support thread — and "did we send that or did the TRB?"
+                      is the whole question this panel exists to answer.
+                    */}
+                    <div
+                      className={`mb-1 text-[10px] font-semibold uppercase tracking-wide ${
+                        sent ? "text-white/70" : "text-ink-3"
+                      }`}
+                    >
+                      {t(sent ? "gateways.inboxSent" : "gateways.inboxReceived")}
+                    </div>
+                    {/* break-words: an SMS can be one long unbroken token. */}
+                    <div className="whitespace-pre-wrap break-words font-mono text-sm leading-relaxed" dir="ltr">
                       {msg.text}
                     </div>
                     <div
-                      className={`mt-1 text-[11px] tabular-nums ${
+                      className={`mt-1.5 text-[11px] tabular-nums ${
                         sent ? "text-white/70" : "text-ink-3"
                       }`}
                     >

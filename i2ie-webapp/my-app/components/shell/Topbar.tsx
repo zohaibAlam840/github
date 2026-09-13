@@ -9,7 +9,7 @@ import { api } from "@/lib/api";
 import { fetchWorkerHealth, type ModemState } from "@/lib/workerStatus";
 import { persistedLang, setLanguage } from "@/lib/i18n";
 import { persistedTheme, setTheme, type Theme } from "@/lib/theme";
-import { IconGlobe, IconLogout, IconMoon, IconRadio, IconSun } from "@/components/icons";
+import { IconGlobe, IconLogout, IconMenu, IconMoon, IconRadio, IconSun } from "@/components/icons";
 import { activeNavItem } from "./nav";
 
 /**
@@ -52,7 +52,7 @@ function chipFor(state: ModemState): TransportStatus {
   }
 }
 
-export function Topbar() {
+export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { t } = useTranslation();
   const { logout } = useAuth();
   const router = useRouter();
@@ -114,8 +114,17 @@ export function Topbar() {
     setLanguage(persistedLang() === "ar" ? "en" : "ar");
 
   return (
-    <header className="flex items-center gap-4 border-b border-hairline bg-surface px-6 py-3">
-      <h1 className="flex-1 text-lg font-semibold text-ink">
+    // flex-wrap: on a phone the chips wrap to a second line instead of
+    // squeezing the page title to nothing or forcing a horizontal scroll.
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-hairline bg-surface px-4 py-3 sm:px-6">
+      <button
+        onClick={onMenu}
+        className="-ms-1 rounded-lg p-1.5 text-ink-2 hover:bg-hairline/40 lg:hidden"
+        aria-label={t("nav.openMenu")}
+      >
+        <IconMenu size={20} />
+      </button>
+      <h1 className="flex-1 truncate text-base font-semibold text-ink sm:text-lg">
         {active ? t(active.i18nKey) : t("app.name")}
       </h1>
 

@@ -13,7 +13,9 @@
     "logs": "Logs",
     "settings": "Settings",
     "users": "Users",
-    "modem": "Modem"
+    "modem": "Modem",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
   },
   "roles": {
     "admin": "Admin",
@@ -319,7 +321,20 @@
     "addUser": "Add user",
     "confirmDelete": "Delete this user?",
     "usernameTaken": "That username is already taken.",
-    "you": "you"
+    "you": "you",
+    "myPassword": "Change my password",
+    "myPasswordHint": "At least 8 characters. You will stay signed in on this device.",
+    "currentPassword": "Current password",
+    "newPassword": "New password",
+    "confirmPassword": "Confirm new password",
+    "changePassword": "Change password",
+    "passwordChanged": "Password changed.",
+    "passwordMismatch": "The two new passwords do not match.",
+    "resetPassword": "Reset password",
+    "resetPasswordHint": "Set a new password for this user without knowing their current one",
+    "resetHint": "The user is not told automatically — give them the new password yourself, and ask them to change it.",
+    "resetDone": "{{name}}'s password has been reset.",
+    "resetTellThem": "Tell them the new password in person. It is not shown again here."
   },
   "common": {
     "comingSoon": "Coming soon",
@@ -329,7 +344,8 @@
     "minutesAgo": "{{count}}m ago",
     "hoursAgo": "{{count}}h ago",
     "daysAgo": "{{count}}d ago",
-    "lastSent": "Last sent"
+    "lastSent": "Last sent",
+    "close": "Close"
   },
   "stub": {
     "buildings": "Buildings → Units → Valves management: full CRUD tree, valve control buttons, bulk close per building/unit.",

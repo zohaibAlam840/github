@@ -200,6 +200,9 @@ export const api = {
       post<User>("/api/users", { name, username, password, role }),
     /** DELETE /api/users/:id */
     remove: (id: number) => del(`/api/users/${id}`),
+    /** PUT /api/users/:id/password — own change needs currentPassword; an admin reset does not. */
+    changePassword: (id: number, newPassword: string, currentPassword?: string) =>
+      put<void>(`/api/users/${id}/password`, { newPassword, currentPassword }),
   },
 
   commands: {

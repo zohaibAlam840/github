@@ -13,7 +13,7 @@ import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Role, User } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
-import { Button, Card } from "@/components/ui";
+import { Button, Card, Field, Modal } from "@/components/ui";
 import { IconX } from "@/components/icons";
 
 const ROLES: Role[] = ["admin", "operator", "viewer"];
@@ -31,6 +31,7 @@ function UsersScreen() {
   const { user: me } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [resetFor, setResetFor] = useState<User | null>(null);
 
   const load = useCallback(async () => {
     setUsers(await api.users.list());
@@ -42,6 +43,10 @@ function UsersScreen() {
 
   return (
     <div className="max-w-3xl space-y-4">
+      <ChangeMyPasswordCard />
+      {resetFor && (
+        <ResetPasswordModal user={resetFor} onClose={() => setResetFor(null)} />
+      )}
       {error && (
         <div className="rounded-lg border border-critical/40 bg-critical/10 px-4 py-2.5 text-sm text-critical">
           {error}
@@ -49,6 +54,7 @@ function UsersScreen() {
       )}
 
       <Card>
+        <div className="overflow-x-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-hairline text-xs text-ink-3">
@@ -74,6 +80,15 @@ function UsersScreen() {
                 <td className="px-4 py-3 text-end">
                   {me?.id !== u.id && (
                     <button
+                      onClick={() => setResetFor(u)}
+                      className="me-1 rounded px-2 py-1 text-xs text-ink-3 hover:text-brand"
+                      title={t("users.resetPasswordHint")}
+                    >
+                      {t("users.resetPassword")}
+                    </button>
+                  )}
+                  {me?.id !== u.id && (
+                    <button
                       onClick={async () => {
                         if (confirm(t("users.confirmDelete"))) {
                           await api.users.remove(u.id);
@@ -91,6 +106,7 @@ function UsersScreen() {
             ))}
           </tbody>
         </table>
+        </div>
         <AddUserForm
           onAdded={load}
           onError={(code) =>
@@ -177,5 +193,140 @@ function AddUserForm({
         {t("buildings.add")}
       </Button>
     </form>
+  );
+}
+
+/**
+ * Change your own password. Requires the current one, so someone who walks
+ * up to an unlocked screen cannot lock the real owner out of a system that
+ * controls physical valves.
+ */
+function ChangeMyPasswordCard() {
+  const { t } = useTranslation();
+  const { user: me } = useAuth();
+  const [current, setCurrent] = useState("");
+  const [next, setNext] = useState("");
+  const [confirmValue, setConfirmValue] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<{ ok: boolean; message: string } | null>(null);
+
+  if (!me) return null;
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setResult(null);
+    if (next !== confirmValue) {
+      setResult({ ok: false, message: t("users.passwordMismatch") });
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.users.changePassword(me!.id, next, current);
+      setResult({ ok: true, message: t("users.passwordChanged") });
+      setCurrent("");
+      setNext("");
+      setConfirmValue("");
+    } catch (err) {
+      setResult({ ok: false, message: err instanceof Error ? err.message : String(err) });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card className="p-5">
+      <h2 className="text-sm font-semibold text-ink">{t("users.myPassword")}</h2>
+      <p className="mb-4 mt-1 text-xs leading-relaxed text-ink-3">{t("users.myPasswordHint")}</p>
+      <form onSubmit={submit} className="grid gap-3 sm:grid-cols-3">
+        <Field
+          label={t("users.currentPassword")}
+          type="password"
+          autoComplete="current-password"
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+          required
+        />
+        <Field
+          label={t("users.newPassword")}
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+          required
+        />
+        <Field
+          label={t("users.confirmPassword")}
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={confirmValue}
+          onChange={(e) => setConfirmValue(e.target.value)}
+          required
+        />
+        <div className="sm:col-span-3">
+          <Button type="submit" disabled={busy}>
+            {t("users.changePassword")}
+          </Button>
+        </div>
+      </form>
+      {result && (
+        <p className={`mt-2 text-xs ${result.ok ? "text-good" : "text-critical"}`}>
+          {result.message}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+/** Admin reset for someone else — no current password, because the point of a reset is that nobody knows it. */
+function ResetPasswordModal({ user, onClose }: { user: User; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [next, setNext] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  async function submit(e: FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.users.changePassword(user.id, next);
+      setDone(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={`${t("users.resetPassword")} — ${user.name}`}>
+      {done ? (
+        <div className="space-y-3">
+          <p className="text-sm text-good">{t("users.resetDone", { name: user.name })}</p>
+          <p className="text-xs leading-relaxed text-ink-3">{t("users.resetTellThem")}</p>
+          <Button onClick={onClose}>{t("common.close")}</Button>
+        </div>
+      ) : (
+        <form onSubmit={submit} className="space-y-3">
+          <Field
+            label={t("users.newPassword")}
+            type="password"
+            autoComplete="new-password"
+            minLength={8}
+            value={next}
+            onChange={(e) => setNext(e.target.value)}
+            required
+          />
+          <p className="text-xs leading-relaxed text-ink-3">{t("users.resetHint")}</p>
+          {error && <p className="text-xs text-critical">{error}</p>}
+          <Button type="submit" disabled={busy}>
+            {t("users.resetPassword")}
+          </Button>
+        </form>
+      )}
+    </Modal>
   );
 }

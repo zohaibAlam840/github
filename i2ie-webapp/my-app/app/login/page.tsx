@@ -94,10 +94,13 @@ export default function LoginPage() {
           </form>
         </Card>
 
-        {/* Demo credentials — mock phase only */}
-        <p className="mt-4 text-center text-xs text-ink-3">
-          {t("login.demo")}: {t("login.demoHint")}
-        </p>
+        {/*
+          The demo-credentials line that used to sit here is gone.
+          Printing "admin / admin" on the sign-in page of a system that
+          controls physical valves hands the keys to anyone who reaches the
+          screen — and this is a machine in a control office, not a sandbox.
+          Credentials belong with the person who installed it.
+        */}
       </div>
     </main>
   );

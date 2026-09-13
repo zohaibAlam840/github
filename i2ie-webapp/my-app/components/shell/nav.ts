@@ -13,6 +13,7 @@ import {
   IconGateway,
   IconLogs,
   IconQueue,
+  IconRadio,
   IconSettings,
   IconUsers,
 } from "@/components/icons";
@@ -30,6 +31,9 @@ export const NAV_ITEMS: NavItem[] = [
   { href: "/buildings", i18nKey: "nav.buildings", icon: IconBuilding, roles: ["admin", "operator", "viewer"] },
   { href: "/queue", i18nKey: "nav.queue", icon: IconQueue, roles: ["admin", "operator", "viewer"] },
   { href: "/gateways", i18nKey: "nav.gateways", icon: IconGateway, roles: ["admin"] },
+  // Operators get this one too: they are the people standing next to the PC
+  // when sends stop working, and the answer is almost always on this screen.
+  { href: "/modem", i18nKey: "nav.modem", icon: IconRadio, roles: ["admin", "operator"] },
   { href: "/logs", i18nKey: "nav.logs", icon: IconLogs, roles: ["admin", "operator", "viewer"] },
   { href: "/settings", i18nKey: "nav.settings", icon: IconSettings, roles: ["admin"] },
   { href: "/users", i18nKey: "nav.users", icon: IconUsers, roles: ["admin"] },

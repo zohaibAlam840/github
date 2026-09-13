@@ -13,12 +13,12 @@
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import type { Settings } from "@/lib/types";
 import { AdminOnly } from "@/components/AdminOnly";
 import { Button, Card, Field } from "@/components/ui";
-import { SmsDeviceCard } from "@/components/settings/SmsDeviceCard";
 import { IconRadio, IconTrash } from "@/components/icons";
 
 export default function SettingsPage() {
@@ -227,9 +227,23 @@ function SettingsScreen() {
 
       <Button type="submit">{t("settings.save")}</Button>
 
-      {/* Live modem state. Outside the save form: it reports and acts on the
-          worker directly, nothing here is a saved setting. */}
-      <SmsDeviceCard workerUrl={settings.workerUrl} />
+      {/* Live modem state moved to its own screen (Modem). It is the thing
+          people come back to when sends stop working, and it does not belong
+          at the bottom of a form you fill in once. Kept as a pointer so
+          anyone who learned the old location is not left hunting. */}
+      <Card className="p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <IconRadio size={16} className="text-ink-3" />
+          <h2 className="text-sm font-semibold text-ink">{t("device.section")}</h2>
+        </div>
+        <p className="mt-1 text-xs leading-relaxed text-ink-3">{t("settings.modemMoved")}</p>
+        <Link
+          href="/modem"
+          className="mt-3 inline-block text-xs font-medium text-brand hover:underline"
+        >
+          {t("nav.modem")} →
+        </Link>
+      </Card>
 
       {/* Danger zone — outside the save form on purpose, its own action */}
       <Card className="border-critical/30 p-5">

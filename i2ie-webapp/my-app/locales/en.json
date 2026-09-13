@@ -12,7 +12,8 @@
     "guide": "TRB141 Guide",
     "logs": "Logs",
     "settings": "Settings",
-    "users": "Users"
+    "users": "Users",
+    "modem": "Modem"
   },
   "roles": {
     "admin": "Admin",
@@ -210,7 +211,8 @@
     "sendHint": "Sends one of this gateway's own configured keywords directly, as one SMS — never free text, so only a command the device actually understands can be sent. The password prefix is added automatically if this gateway has one set.",
     "sendNeedsWorker": "Connect a worker (Settings → Worker URL) to send a real message — this only works against real hardware.",
     "sendNeedsPermission": "Viewer accounts can't send messages.",
-    "sendWaiting": "Waiting for a reply… {{seconds}}s"
+    "sendWaiting": "Waiting for a reply… {{seconds}}s",
+    "sendSeeChat": "Sent messages and any replies appear in the Inbox above."
   },
   "logs": {
     "search": "Search valve / building / user…",
@@ -254,7 +256,8 @@
     "resetHint": "Permanently deletes every building, unit, valve, gateway and command — a one-click way to clear out stray test/demo data instead of removing it piece by piece. Your login accounts and these settings are kept.",
     "resetAllData": "Clear all data",
     "resetting": "Clearing…",
-    "resetConfirm": "This permanently deletes every building, unit, valve, gateway and command. This cannot be undone. Continue?"
+    "resetConfirm": "This permanently deletes every building, unit, valve, gateway and command. This cannot be undone. Continue?",
+    "modemMoved": "The office modem now has its own screen, with live status, the port scan, Rescan and Test SMS."
   },
   "guide": {
     "intro": "Everything a technician needs to configure a TRB141 gateway so it works with this dashboard — written from what's actually been bench-confirmed on real hardware, not just the Teltonika docs. Anything not yet verified is flagged as such.",
@@ -374,5 +377,11 @@
     "testSent": "Sent — the network accepted it (reference {{ref}}). Check the phone.",
     "testFailed": "The test message could not be sent.",
     "checkedAt": "Last checked at {{time}}"
+  },
+  "modem": {
+    "workerSection": "Worker connection",
+    "workerHint": "The dashboard does not talk to the modem directly. It talks to the worker program running on this PC, and the worker owns the COM port. If this address is blank or wrong, every screen falls back to demo data and no SMS is ever sent.",
+    "workerSave": "Save address",
+    "workerUnset": "Not set — ask an admin to set the worker address."
   }
 }

@@ -419,12 +419,19 @@ export class ModemSupervisor implements SmsTransport {
       purgeStorageOnStart: this.config.purgeStorageOnStart,
     });
 
-    if (!(await transport.waitUntilReady(15_000))) {
+    // 25s, not 15: the init sequence is a dozen commands, and a modem that is
+    // slow to answer one optional parameter write should not be discarded as
+    // broken.
+    if (!(await transport.waitUntilReady(25_000))) {
+      // The transport knows WHY. Pointing at a log file was useless to whoever
+      // is standing at the machine, and every distinct cause — port in use,
+      // blank SMS centre, a rejected command — read identically.
+      const why = transport.whyNotReady;
       transport.close();
       this.snapshot = applyProbe(this.snapshot, chosen);
       this.reject(
         "not_ready",
-        `Modem on ${chosen.comPort} was found but failed to initialise. See data/at-log.txt.`
+        why ?? `Modem on ${chosen.comPort} was found but did not finish starting up. See data/at-log.txt.`
       );
       return;
     }

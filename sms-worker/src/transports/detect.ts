@@ -185,9 +185,16 @@ async function qualify(
   } catch (err) {
     return { ...base, verdict: "unreachable", reason: `Probe failed: ${msg(err)}` };
   } finally {
-    session?.close();
+    // Awaited, and then a beat longer: Windows releases a COM port a little
+    // after the close callback fires, and the very next thing we do is reopen
+    // this exact port to drive the modem.
+    await session?.close();
+    await new Promise((r) => setTimeout(r, PORT_RELEASE_MS));
   }
 }
+
+/** Grace period after closing a port before anything may reopen it. */
+const PORT_RELEASE_MS = 400;
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
@@ -269,7 +276,22 @@ class ProbeSession {
     return (await this.ask(cmd, timeoutMs)).includes("OK");
   }
 
-  close() {
-    if (this.port.isOpen) this.port.close(() => {});
+  /**
+   * Resolves only once the port is REALLY closed.
+   *
+   * This has to be awaited. Probing and then running the modem both use the
+   * same COM port, one straight after the other — and on Windows a port that
+   * is still closing rejects the next open with "Access denied". Fire-and-
+   * forget here meant detection succeeded and the transport then failed to
+   * open, which surfaced as the thoroughly misleading "modem found but failed
+   * to initialise".
+   */
+  close(): Promise<void> {
+    return new Promise((resolve) => {
+      if (!this.port.isOpen) return resolve();
+      this.port.close(() => resolve());
+      // Never hang the scan on a port that will not admit to closing.
+      setTimeout(resolve, 2000);
+    });
   }
 }

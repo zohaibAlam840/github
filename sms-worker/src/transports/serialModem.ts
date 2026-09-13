@@ -200,6 +200,13 @@ export class SerialModemTransport implements SmsTransport {
   private smsc: string | null = null;
   private sweepTimer: ReturnType<typeof setInterval> | null = null;
   private lastOkAt = 0;
+  /**
+   * Why this transport is not ready, in plain language. The supervisor used
+   * to report "failed to initialise. See data/at-log.txt." for every cause —
+   * a port that could not be opened, a blank SMS centre, a rejected command —
+   * which told whoever was standing at the machine nothing at all.
+   */
+  private failureReason: string | null = null;
   /** The AT+CNMI form this module actually accepted, or null if none did. */
   private pushMode: string | null = null;
   /** True only if the accepted CNMI form includes delivery reports. */
@@ -209,7 +216,13 @@ export class SerialModemTransport implements SmsTransport {
 
   constructor(private config: SerialModemConfig) {
     this.port = new SerialPort({ path: config.comPort, baudRate: config.baudRate ?? 115200 });
-    this.port.on("error", (err) => this.log("--", `PORT ERROR: ${err.message}`));
+    this.port.on("error", (err) => {
+      this.log("--", `PORT ERROR: ${err.message}`);
+      // An open that fails means init() never runs, so this is the only
+      // place the cause can be captured. "Access is denied" here almost
+      // always means something else still holds the port.
+      if (!this.ready) this.failureReason = `Could not open ${this.config.comPort}: ${err.message}`;
+    });
     this.port.on("data", (chunk: Buffer) => this.onData(chunk.toString("utf8")));
     this.port.on("open", () => {
       this.log("--", `opened ${config.comPort}`);
@@ -505,7 +518,12 @@ export class SerialModemTransport implements SmsTransport {
         // that was working perfectly. Try richest first, settle for less.
         this.pushMode = null;
         for (const variant of ["AT+CNMI=2,1,0,1,0", "AT+CNMI=2,1,0,0,0", "AT+CNMI=2,1", "AT+CNMI=1,1,0,0,0"]) {
-          const accepted = await this.tryCommand(variant);
+          // Short timeout on purpose. AT+CNMI is a trivial parameter write
+          // that answers instantly or not at all, and four attempts at the
+          // 8s default would be 32 seconds — longer than the supervisor's
+          // whole init budget, so a modem could be failed for being slow at
+          // something optional.
+          const accepted = await this.tryCommand(variant, 3000);
           if (accepted.includes("OK")) {
             this.pushMode = variant;
             this.deliveryReportsSupported = variant.includes(",0,1,");
@@ -545,6 +563,9 @@ export class SerialModemTransport implements SmsTransport {
       });
 
       if (!this.smsc || this.smsc.length < 5) {
+        this.failureReason =
+          "The SIM has no SMS service centre set, so every message would fail silently. " +
+          'Set SMSC in the worker configuration (AT+CSCA="+974...").';
         this.log("--", "INIT REFUSED: no SMS centre configured");
         console.error(
           "[serialModem] SMS centre is not set on this SIM — sending would fail silently. " +
@@ -561,6 +582,7 @@ export class SerialModemTransport implements SmsTransport {
       await this.exclusive(() => this.reportStaleStorage());
       this.startSweep();
     } catch (err) {
+      this.failureReason = `Modem setup failed: ${err instanceof Error ? err.message : String(err)}`;
       this.log("--", `INIT FAILED: ${err instanceof Error ? err.message : err}`);
       console.error(
         `[serialModem] Init failed — check the baud rate and that the modem is powered: ${
@@ -843,6 +865,11 @@ export class SerialModemTransport implements SmsTransport {
   async checkStatus(providerId: string): Promise<{ state: string } | null> {
     const state = this.deliveryReports.get(providerId);
     return state ? { state } : null;
+  }
+
+  /** Why the modem is not usable, when it is not. Null while all is well. */
+  get whyNotReady(): string | null {
+    return this.failureReason;
   }
 
   /** When an AT command last succeeded — a recent send is better proof than a probe. */

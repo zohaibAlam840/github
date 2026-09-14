@@ -219,6 +219,20 @@ export interface Settings {
   // silently simulating — see demoMode.
   workerUrl: string | null;
 
+  // The office SIM's own number, typed in by hand.
+  //
+  // It cannot be detected. A phone number is not stored on the SIM — it
+  // lives in the operator's network, keyed to the card's IMSI. AT+CNUM only
+  // reads EF_MSISDN, an optional convenience copy the operator may write at
+  // provisioning, and Qatari prepaid SIMs routinely ship with it empty. No
+  // AT command can recover it.
+  //
+  // So it is a setting, sourced the only way that works: send a test SMS and
+  // read the number it arrived from. Purely informational — it is what the
+  // TRB141 rules must authorise and what a resident sees a message come
+  // from, so it is worth having on screen instead of in someone's head.
+  modemNumber: string | null;
+
   // Simulate every command instead of sending it: random outcomes, random
   // timing, no SMS. Opt-in and off by default, because it used to be
   // selected accidentally by a null workerUrl and is indistinguishable from

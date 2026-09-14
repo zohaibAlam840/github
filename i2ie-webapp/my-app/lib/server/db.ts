@@ -63,6 +63,12 @@ export const DEFAULT_SETTINGS: Settings = {
    */
   workerUrl: DEFAULT_WORKER_URL,
   /*
+   * Blank until someone records it. Deliberately not guessed: showing a
+   * wrong number here is worse than showing none, because this is the
+   * number an operator would authorise in a TRB141 rule.
+   */
+  modemNumber: null,
+  /*
    * Simulation is now opt-in, and off.
    *
    * It used to be selected by ACCIDENT — a null workerUrl silently switched

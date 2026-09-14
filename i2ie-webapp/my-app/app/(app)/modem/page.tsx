@@ -27,6 +27,7 @@ import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import type { Settings } from "@/lib/types";
+import { normalizePhone, phoneProblem } from "@/lib/phone";
 import { Button, Card, Field } from "@/components/ui";
 import { SmsDeviceCard } from "@/components/settings/SmsDeviceCard";
 import { DEFAULT_WORKER_URL, fetchWorkerHealth, type WorkerHealth } from "@/lib/workerStatus";
@@ -50,8 +51,11 @@ function ModemScreen({ canEditWorkerUrl }: { canEditWorkerUrl: boolean }) {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<Settings | null>(null);
   const [draftUrl, setDraftUrl] = useState("");
+  const [draftNumber, setDraftNumber] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [savingNumber, setSavingNumber] = useState(false);
+  const [savedNumber, setSavedNumber] = useState(false);
   const [health, setHealth] = useState<WorkerHealth | null>(null);
   const [reachable, setReachable] = useState<boolean | null>(null);
 
@@ -69,6 +73,7 @@ function ModemScreen({ canEditWorkerUrl }: { canEditWorkerUrl: boolean }) {
        * ambiguity entirely.
        */
       setDraftUrl(s.workerUrl ?? DEFAULT_WORKER_URL);
+      setDraftNumber(s.modemNumber ?? "");
     });
   }, []);
 
@@ -109,6 +114,29 @@ function ModemScreen({ canEditWorkerUrl }: { canEditWorkerUrl: boolean }) {
       setSaving(false);
     }
   }
+
+  async function saveModemNumber(e: FormEvent) {
+    e.preventDefault();
+    setSavingNumber(true);
+    try {
+      // Normalised through the same helper the gateway forms use, so a
+      // number typed as "030373901" or "0097430373901" is stored in the one
+      // form everything else compares against.
+      const raw = draftNumber.trim();
+      const value = raw ? normalizePhone(raw) : null;
+      const updated = await api.settings.update({ modemNumber: value });
+      setSettings(updated);
+      setDraftNumber(updated.modemNumber ?? "");
+      setSavedNumber(true);
+      setTimeout(() => setSavedNumber(false), 3000);
+    } finally {
+      setSavingNumber(false);
+    }
+  }
+
+  const numberWarning = draftNumber.trim()
+    ? phoneProblem(normalizePhone(draftNumber.trim()))
+    : null;
 
   return (
     <div className="max-w-3xl space-y-4">
@@ -200,7 +228,58 @@ function ModemScreen({ canEditWorkerUrl }: { canEditWorkerUrl: boolean }) {
         <p className="mt-3 text-xs leading-relaxed text-ink-3">{t("modem.keywordsEdit")}</p>
       </Card>
 
-      <SmsDeviceCard workerUrl={settings.workerUrl} />
+      {/*
+        The office SIM's own number.
+
+        It is a text box and not a reading because no AT command can recover
+        it — a phone number lives in the operator's network keyed to the
+        SIM's IMSI, not on the card. AT+CNUM only reads EF_MSISDN, an
+        optional copy the operator may never have written, and on the Qatari
+        prepaid SIM in use it is empty.
+
+        The only reliable source is a test SMS: send one, read the number it
+        arrived from, type it here once.
+      */}
+      <Card className="p-5">
+        <div className="mb-1 flex items-center gap-2">
+          <IconRadio size={16} className="text-ink-3" />
+          <h2 className="text-sm font-semibold text-ink">{t("modem.numberSection")}</h2>
+        </div>
+        <p className="mb-4 mt-1 text-xs leading-relaxed text-ink-3">{t("modem.numberHint")}</p>
+
+        {canEditWorkerUrl ? (
+          <form onSubmit={saveModemNumber} className="flex flex-wrap items-end gap-3">
+            <div className="min-w-64 flex-1">
+              <Field
+                label={t("device.ownNumber")}
+                value={draftNumber}
+                onChange={(e) => setDraftNumber(e.target.value)}
+                placeholder={t("modem.numberPlaceholder")}
+                dir="ltr"
+              />
+            </div>
+            <Button type="submit" disabled={savingNumber}>
+              {t("modem.workerSave")}
+            </Button>
+            {savedNumber && <span className="pb-2 text-xs text-good">{t("settings.saved")}</span>}
+          </form>
+        ) : (
+          <p className="text-xs font-medium text-ink-2" dir="ltr">
+            {settings.modemNumber ?? t("modem.numberUnset")}
+          </p>
+        )}
+
+        {/* A warning, never a block — see phoneProblem(). A number that looks
+            wrong is worth flagging, but this field is informational and
+            refusing to save it would help nobody. */}
+        {numberWarning && (
+          <p className="mt-3 text-xs font-medium text-warn">
+            {t(`gateways.sim_${numberWarning}`, { number: normalizePhone(draftNumber.trim()) })}
+          </p>
+        )}
+      </Card>
+
+      <SmsDeviceCard workerUrl={settings.workerUrl} modemNumber={settings.modemNumber} />
     </div>
   );
 }

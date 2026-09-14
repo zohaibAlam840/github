@@ -53,7 +53,14 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-export function SmsDeviceCard({ workerUrl }: { workerUrl: string | null }) {
+export function SmsDeviceCard({
+  workerUrl,
+  /** The hand-recorded office SIM number, used only when the SIM has none. */
+  modemNumber = null,
+}: {
+  workerUrl: string | null;
+  modemNumber?: string | null;
+}) {
   const { t } = useTranslation();
 
   const [modem, setModem] = useState<ModemSnapshot | null>(null);
@@ -173,10 +180,20 @@ export function SmsDeviceCard({ workerUrl }: { workerUrl: string | null }) {
           {/* Many prepaid SIMs never had an MSISDN written to them, so AT+CNUM
               returns nothing. That is normal, and saying "—" would read as a
               fault — this is the number a TRB141 replies to, so it is worth
-              explaining rather than blanking. */}
+              explaining rather than blanking.
+
+              Order matters: the SIM's own value wins when it exists, because
+              the operator wrote it. The recorded one is a human's note and
+              is labelled as such, so nobody mistakes a typed number for a
+              measured one. */}
           <Row
             label={t("device.ownNumber")}
-            value={modem.ownNumber ?? t("device.ownNumberUnknown")}
+            value={
+              modem.ownNumber ??
+              (modemNumber
+                ? `${modemNumber}  ${t("device.ownNumberRecorded")}`
+                : t("device.ownNumberUnknown"))
+            }
           />
           <Row label={t("device.operator")} value={modem.operator ?? "—"} />
           <Row label={t("device.technology")} value={modem.technology ?? "—"} />

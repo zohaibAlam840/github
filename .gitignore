@@ -84,3 +84,21 @@ desktop.ini
 
 # Ad-hoc AT test scripts written while working on a client machine.
 *.ps1
+
+# ---------------------------------------------------------------------------
+# Launcher runtime scratch — PID file and per-run logs. Disposable;
+# recreated on every start.
+# ---------------------------------------------------------------------------
+/.run/
+
+# The Desktop icon, drawn at install time by scripts/install-shortcut.ps1.
+# Generated rather than committed so it stays in step with app/icon.svg, and
+# kept OUT of .run/ so emptying that folder does not blank the shortcut.
+/i2i.ico
+
+# The launcher itself, exempted from the "*.ps1" rule above. That rule is
+# aimed at ad-hoc AT test scripts, but these three ARE the delivered product:
+# without them the client has no way to start the system.
+!/start-i2i.ps1
+!/scripts/stop-i2i.ps1
+!/scripts/install-shortcut.ps1

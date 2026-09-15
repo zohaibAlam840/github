@@ -18,6 +18,7 @@ import {
   IconSend,
   IconSpinner,
   IconX,
+  IconSkip,
 } from "./icons";
 
 /* ---------- Card ---------- */
@@ -104,6 +105,11 @@ function chipParts(status: ValveStatus | CommandStatus | GatewayReachability | "
     case "success":
     case "ok":
       return { color: "text-good", icon: <IconCheck size={13} /> };
+    case "skipped":
+      // Grey, and NOT red. Nothing was attempted and nothing went wrong with
+      // this valve — its gateway was already known to be failing. Colouring
+      // it as a failure would blame the valve for the gateway.
+      return { color: "text-ink-3", icon: <IconSkip size={13} /> };
     case "unconfirmed":
       // Deliberately NOT the same green as "success" — this is a real
       // command outcome that was never actually verified, on purpose

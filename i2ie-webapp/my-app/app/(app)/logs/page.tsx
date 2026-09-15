@@ -13,6 +13,17 @@
 import { Fragment, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import {
+  applyFilters,
+  EMPTY_FILTERS,
+  RecordFilters,
+  type FilterState,
+} from "@/components/filters/RecordFilters";
+import {
+  BuildingLink,
+  GatewayLink,
+  ValveLink,
+} from "@/components/filters/RecordLinks";
 import { onAppEvent } from "@/lib/socket";
 import { debounce } from "@/lib/debounce";
 import type { CommandLog, CommandStatus } from "@/lib/types";
@@ -32,9 +43,7 @@ const STATUSES: CommandStatus[] = [
 export default function LogsPage() {
   const { t, i18n } = useTranslation();
   const [rows, setRows] = useState<CommandLog[]>([]);
-  const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<CommandStatus | "all">("all");
-  const [building, setBuilding] = useState<string>("all");
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
   const [expandedId, setExpandedId] = useState<number | null>(null);
 
   useEffect(() => {
@@ -50,27 +59,7 @@ export default function LogsPage() {
     };
   }, []);
 
-  const buildings = useMemo(
-    () => [...new Set(rows.map((r) => r.buildingName))].sort(),
-    [rows]
-  );
-
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      if (status !== "all" && r.status !== status) return false;
-      if (building !== "all" && r.buildingName !== building) return false;
-      if (
-        q &&
-        ![r.valveCode, r.buildingName, r.unitName, r.userName, r.simNumber]
-          .join(" ")
-          .toLowerCase()
-          .includes(q)
-      )
-        return false;
-      return true;
-    });
-  }, [rows, search, status, building]);
+  const filtered = useMemo(() => applyFilters(rows, filters), [rows, filters]);
 
   const fmt = (iso: string | null) =>
     iso
@@ -82,7 +71,7 @@ export default function LogsPage() {
 
   function exportCsv() {
     const headers = [
-      "id", "created_at", "building", "unit", "valve", "sim_number",
+      "id", "created_at", "building", "unit", "valve", "gateway", "sim_number",
       "action", "sms_text", "status", "sent_at", "reply", "reply_at",
       "user", "retries",
     ];
@@ -92,7 +81,7 @@ export default function LogsPage() {
     };
     const lines = filtered.map((r) =>
       [
-        r.id, r.createdAt, r.buildingName, r.unitName, r.valveCode,
+        r.id, r.createdAt, r.buildingName, r.unitName, r.valveCode, r.gatewayLabel,
         r.simNumber, r.action, r.commandText, r.status, r.sentAt,
         r.replyText, r.replyAt, r.userName, r.retries,
       ]
@@ -116,41 +105,16 @@ export default function LogsPage() {
 
   return (
     <div className="space-y-4">
-      {/* Filter row */}
+      {/* One filter bar, shared with the Queue and Alerts screens. */}
       <div className="flex flex-wrap items-center gap-2">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t("logs.search")}
-          className={`${inputCls} min-w-56 flex-1`}
-        />
-        <select
-          value={status}
-          onChange={(e) => setStatus(e.target.value as CommandStatus | "all")}
-          className={inputCls}
-        >
-          <option value="all">{t("logs.allStatuses")}</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {t(`status.${s}`)}
-            </option>
-          ))}
-        </select>
-        <select
-          value={building}
-          onChange={(e) => setBuilding(e.target.value)}
-          className={inputCls}
-        >
-          <option value="all">{t("logs.allBuildings")}</option>
-          {buildings.map((b) => (
-            <option key={b} value={b}>
-              {b}
-            </option>
-          ))}
-        </select>
-        <span className="text-xs text-ink-3">
-          {t("logs.count", { count: filtered.length })}
-        </span>
+        <div className="min-w-0 flex-1">
+          <RecordFilters
+            value={filters}
+            onChange={setFilters}
+            rows={rows}
+            resultCount={filtered.length}
+          />
+        </div>
         <Button
           variant="ghost"
           className="!px-3 !py-1.5 !text-xs"
@@ -208,9 +172,28 @@ export default function LogsPage() {
                         <td className="whitespace-nowrap px-4 py-2.5 tabular-nums text-xs text-ink-2">
                           {fmt(r.createdAt)}
                         </td>
-                        <td className="px-4 py-2.5 text-ink-2">{r.buildingName}</td>
+                        <td className="px-4 py-2.5 text-ink-2">
+                          <BuildingLink
+                            buildingId={r.buildingId}
+                            buildingName={r.buildingName}
+                          />
+                          <span className="block text-xs text-ink-3">
+                            <GatewayLink
+                              gatewayId={r.gatewayId}
+                              gatewayLabel={r.gatewayLabel}
+                              className="text-ink-3 hover:text-brand hover:underline"
+                            />
+                          </span>
+                        </td>
                         <td className="px-4 py-2.5 text-ink-2">{r.unitName}</td>
-                        <td className="px-4 py-2.5 font-medium text-ink">{r.valveCode}</td>
+                        <td className="px-4 py-2.5 font-medium text-ink">
+                          <ValveLink
+                            valveId={r.valveId}
+                            unitId={r.unitId}
+                            buildingId={r.buildingId}
+                            valveCode={r.valveCode}
+                          />
+                        </td>
                         <td className="px-4 py-2.5 font-mono text-xs text-ink-3" dir="ltr">
                           {r.simNumber}
                         </td>

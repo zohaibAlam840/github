@@ -393,7 +393,17 @@ export function createRepo(db: DatabaseSync) {
   function listCommandLogs(limit: number): CommandLog[] {
     const rows = db
       .prepare(
-        `SELECT c.*, v.valve_code AS vc, u.name AS un, b.name AS bn, g.sim_number AS sn
+        /*
+         * The ids come back alongside the names because names alone are a
+         * dead end: they cannot drive a "filter by this TRB" control, and
+         * they cannot build a link from a log row to the valve it is about.
+         * The joins were already here, so this costs nothing.
+         */
+        `SELECT c.*,
+                v.valve_code AS vc, v.unit_id AS uid,
+                u.name AS un, u.building_id AS bid,
+                b.name AS bn,
+                g.id AS gid, g.label AS gl, g.sim_number AS sn
          FROM commands c
          LEFT JOIN valves v ON v.id = c.valve_id
          LEFT JOIN units u ON u.id = v.unit_id
@@ -408,6 +418,10 @@ export function createRepo(db: DatabaseSync) {
       unitName: r.un ?? "—",
       buildingName: r.bn ?? "—",
       simNumber: r.sn ?? "—",
+      gatewayLabel: r.gl ?? "—",
+      gatewayId: r.gid ?? null,
+      buildingId: r.bid ?? null,
+      unitId: r.uid ?? null,
     }));
   }
 

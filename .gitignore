@@ -102,3 +102,16 @@ desktop.ini
 !/start-i2i.ps1
 !/scripts/stop-i2i.ps1
 !/scripts/install-shortcut.ps1
+
+# ---------------------------------------------------------------------------
+# Manual videos.
+#
+# The finished videos under public/videos/ ARE committed, by decision: the
+# manual is part of what the client receives, and a checkout that plays is
+# worth more than a smaller repository.
+#
+# The recorder's working output is not — out/ is regenerated on every run and
+# demo-data/ is a throwaway database.
+# ---------------------------------------------------------------------------
+tools/demo/out/
+tools/demo/demo-data/

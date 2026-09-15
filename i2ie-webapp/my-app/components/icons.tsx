@@ -243,3 +243,18 @@ export const IconSpinner = ({ size = 18, ...props }: IconProps) => (
     />
   </svg>
 );
+
+/** Skip-forward: a command deliberately not sent, not one that failed. */
+export const IconSkip = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M5 5l9 7-9 7z" />
+    <path d="M19 5v14" />
+  </svg>
+);
+
+/** Play triangle — used for the manual's written-steps heading. */
+export const IconPlay = (p: IconProps) => (
+  <svg {...base(p)}>
+    <path d="M6 4l14 8-14 8z" />
+  </svg>
+);

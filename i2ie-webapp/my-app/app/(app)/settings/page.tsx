@@ -187,6 +187,25 @@ function SettingsScreen() {
         </label>
       </Card>
 
+      {/* Give up on a gateway that is clearly down, instead of spending an
+          SMS and a full reply timeout on every valve behind it. */}
+      <Card className="p-5">
+        <h2 className="text-sm font-semibold text-ink">{t("settings.skipSection")}</h2>
+        <p className="mb-4 mt-1 text-xs leading-relaxed text-ink-3">
+          {t("settings.skipHint")}
+        </p>
+        <div className="max-w-xs">
+          <Field
+            label={t("settings.skipAfterFailures")}
+            type="number"
+            min={0}
+            max={20}
+            value={settings.skipAfterFailures}
+            onChange={(e) => patch("skipAfterFailures", Math.max(0, Number(e.target.value)))}
+          />
+        </div>
+      </Card>
+
       {/* Simulation — opt-in, and loudly labelled when on. */}
       <Card className="border-warn/30 p-5">
         <h2 className="text-sm font-semibold text-ink">{t("settings.demoSection")}</h2>

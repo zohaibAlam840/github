@@ -32,6 +32,7 @@ import {
   IconSend,
   IconValve,
   IconX,
+  IconSkip,
 } from "@/components/icons";
 
 export default function DashboardPage() {
@@ -164,6 +165,8 @@ function FeedRow({ event, locale }: { event: ActivityEvent; locale: string }) {
     timeout: <IconClock size={14} className="text-serious" />,
     failed: <IconX size={14} className="text-critical" />,
     cancelled: <IconX size={14} className="text-ink-3" />,
+    skipped: <IconSkip size={14} className="text-ink-3" />,
+    gatewayDown: <IconRadio size={14} className="text-critical" />,
     ping: <IconRadio size={14} className="text-ink-3" />,
   } as const;
 

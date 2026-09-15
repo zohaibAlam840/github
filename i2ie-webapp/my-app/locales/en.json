@@ -71,7 +71,8 @@
     "unconfirmed": "Sent (unconfirmed)",
     "ok": "Reachable",
     "unreachable": "Unreachable",
-    "cancelled": "Stopped"
+    "cancelled": "Stopped",
+    "skipped": "Skipped"
   },
   "action": {
     "status": "Check status",
@@ -107,7 +108,9 @@
     "timeout": "{{valve}} did not respond — status unknown · {{building}}",
     "failed": "Sending to {{valve}} failed after retries · {{building}}",
     "ping": "Gateway reachability check completed",
-    "cancelled": "{{user}} stopped a command on {{valve}}"
+    "cancelled": "{{user}} stopped a command on {{valve}}",
+    "skipped": "{{valve}} skipped — its gateway was not answering · {{building}}",
+    "gatewayDown": "A gateway stopped answering — its remaining valves were skipped"
   },
   "topbar": {
     "queue": "Queue",
@@ -283,7 +286,10 @@
     "demoSection": "Demonstration mode",
     "demoHint": "Simulates every command instead of sending it — random outcomes, random timing, no SMS. For showing the dashboard with no hardware attached. Leave this OFF on a system controlling real valves.",
     "demoToggle": "Simulate commands instead of sending them",
-    "demoWarning": "Simulation is ON. No SMS is being sent, and every result you see is invented. Events are prefixed [DEMO]."
+    "demoWarning": "Simulation is ON. No SMS is being sent, and every result you see is invented. Events are prefixed [DEMO].",
+    "skipSection": "Unresponsive gateways",
+    "skipHint": "During a bulk send, a TRB that is powered off or out of coverage fails the same way for every valve behind it. After this many failures in a row from the same gateway, the rest of its valves are skipped instead of each one spending an SMS and a full reply timeout. The gateway is marked unreachable and raised on the Alerts screen. Set to 0 to always attempt every valve.",
+    "skipAfterFailures": "Skip a gateway after this many failures in a row"
   },
   "guide": {
     "intro": "Everything a technician needs to configure a TRB141 gateway so it works with this dashboard — written from what's actually been bench-confirmed on real hardware, not just the Teltonika docs. Anything not yet verified is flagged as such.",
@@ -304,14 +310,14 @@
     "step1Intro": "Services → SMS Utilities → SMS Utilities Configuration → add a rule. Repeat this twice, once per keyword:",
     "step1a": "Keyword — must match the \"Open keyword\" / \"Close keyword\" fields in this dashboard's Settings screen exactly, character for character.",
     "step1b": "Action — \"Change I/O state\".",
-    "step1c": "Target — the Relay output wired to this valve (Relay Output 1 or 2), not Configurable I/O — see the warning above.",
-    "step1d": "State — set to Closed for the open keyword and Open for the close keyword. This mapping is confirmed on our bench; verify the polarity matches your own valve's wiring before trusting it.",
+    "step1c": "Action target — the literal \"Latching Relay\" option (terminals 11, 12, 13). Not \"Relay\", and not \"Configurable Input/Output\" — see the warning above. Picking the wrong one points the rule at a terminal no valve is wired to: the command looks like it worked and nothing moves.",
+    "step1d": "State — Closed for the ON keyword, Open for the OFF keyword. Energising the output CLOSES the relay contact, which is why this reads backwards. Verify the polarity against your own valve's wiring before trusting it.",
     "step1e": "Authorization — \"No authorization\", unless this gateway has a password set in its dashboard entry, in which case use \"By router admin password\".",
     "step1warn": "This rule sends no reply SMS at all — that's expected, not a bug. \"Change I/O state\" never replies on this firmware. Confirmation comes entirely from the status rule below.",
     "step2Title": "Step 2 — Create the status rule (this is what actually confirms a command)",
     "step2a": "Add a third rule. Keyword — must match the \"Status keyword\" field in Settings exactly (default iostatus).",
     "step2b": "Action — \"Send status\".",
-    "step2c": "Edit the message text template — by default it only reports the DIO pins (%pi / %po), not the relay. Add the %rb placeholder (Relay 3,4,5) so the reply actually says what the valve did.",
+    "step2c": "Edit the Message text template — by default it reports only the DIO pins (%pi / %po), not the relay. Replace it with \"Relay - %rl\" so the reply reports the latching relay this project actually drives.",
     "step2body": "This dashboard always sends the actuation command, waits a few seconds for it to settle, then sends this status keyword as a separate follow-up SMS and reads its reply as the real confirmation — two messages per confirmed command, because only this rule replies at all. Confirmed working end-to-end on our bench.",
     "matchTitle": "Keep the keywords in sync",
     "matchBody": "The three keyword strings above (open, close, status) must match, exactly, what's typed into Settings → SMS command keywords on this dashboard. If they drift even slightly the TRB will never recognize the incoming command.",
@@ -326,7 +332,32 @@
     "check3": "Add the gateway here (Gateways → Add gateway, or the guided setup wizard) with its SIM number, then Ping it to confirm it actually answers SMS.",
     "check4": "Send a real Open or Close command from a valve's row and confirm the Queue shows a reply and the relay physically switches.",
     "check5": "Only wire and trust real valves once that round-trip is confirmed — don't assume the dashboard's status is right until you've seen it happen.",
-    "relayUnusedLabel": "Not used"
+    "relayUnusedLabel": "Not used",
+    "tab_manual": "Using the dashboard",
+    "tab_hardware": "TRB141 hardware",
+    "check6": "Confirm the latch. With the valve OFF, cut power to the TRB141, restore it, and send the status keyword. The state must come back OFF. If it comes back ON or unknown, the rule is targeting the plain relay rather than the latching one — the exact failure this deployment is wired to avoid.",
+    "ruleSheetTitle": "The three rules, as typed into the device",
+    "ruleSheetBody": "Services → SMS Utilities → SMS Utilities Configuration → Add. Create three rules and fill each field exactly as below. These three rules are the entire over-the-air contract between this dashboard and the gateway — there is nothing else on the TRB141 that this system needs.",
+    "ruleColField": "Field",
+    "ruleRule1": "Rule 1 — turn ON",
+    "ruleRule2": "Rule 2 — turn OFF",
+    "ruleRule3": "Rule 3 — status",
+    "ruleRowKeyword": "Keyword",
+    "ruleRowAction": "Action",
+    "ruleRowTarget": "Action target",
+    "ruleRowState": "State",
+    "ruleRowMessage": "Message text",
+    "ruleRowAuth": "Authorization",
+    "ruleActionIo": "Change I/O state",
+    "ruleActionStatus": "Send status",
+    "ruleTargetLatching": "Latching Relay (11, 12, 13)",
+    "ruleStateClosed": "Closed",
+    "ruleStateOpen": "Open",
+    "ruleAuthNone": "No authorization *",
+    "ruleSheetLive": "The keywords above are read live from this dashboard's Settings, so they are exactly what the system will send. Type them into the device character for character.",
+    "ruleSheetFallback": "Settings could not be read, so the keywords above are the built-in defaults. Open Settings → SMS command keywords and check them before typing them into the device.",
+    "ruleSheetOneRelay": "The message text must name exactly ONE relay. %rl reports the Latching Relay (11,12,13) — the one this project drives. %rb reports the plain Relay (3,4,5), which nothing here is wired to. Do not put both in the template: the reply would describe two relays, and the worker refuses to guess which one the valve is on, so every command would come back unconfirmed.",
+    "ruleSheetAuthNote": "* Use \"By router admin password\" instead if you have set an auth password on this gateway's entry in the Gateways screen. The dashboard then sends \"<password> <keyword>\", and all three rules must expect it — a mismatch on any one of them makes that rule ignore every message silently."
   },
   "users": {
     "name": "Full name",
@@ -450,5 +481,293 @@
     "keywordsHint": "The exact SMS text each button sends. These must match the SMS Utilities rules configured on the TRB141 — if they do not, the device matches no rule and simply never replies, which looks exactly like a dead gateway.",
     "keywordMismatch": "The worker's own default for this is \"{{theirs}}\". The dashboard value above is what actually gets sent — check it matches the rule on the device.",
     "keywordsEdit": "Change these in Settings → SMS keywords."
+  },
+  "filters": {
+    "searchPlaceholder": "Search valve, unit, building, TRB, number, reply...",
+    "date": "Date range",
+    "date_all": "Any date",
+    "date_today": "Today",
+    "date_7d": "Last 7 days",
+    "date_30d": "Last 30 days",
+    "date_custom": "Between dates...",
+    "from": "From",
+    "to": "To",
+    "building": "Building",
+    "allBuildings": "All buildings",
+    "gateway": "TRB gateway",
+    "allGateways": "All TRBs",
+    "status": "Status",
+    "allStatuses": "Any status",
+    "clear": "Clear",
+    "showing": "{{count}} shown",
+    "none": "Nothing matches these filters.",
+    "noneHint": "Widen the date range, or clear the filters."
+  },
+  "bulk": {
+    "sendingTo": "Sending to {{valve}}…",
+    "waitingForLane": "Waiting for the modem…",
+    "finished": "Finished — {{count}} valves",
+    "nConfirmed": "{{count}} confirmed",
+    "nSent": "{{count}} sent (unverified)",
+    "nNoReply": "{{count}} no reply",
+    "nFailed": "{{count}} failed",
+    "nSkipped": "{{count}} skipped — a gateway stopped answering",
+    "viewAlerts": "View alerts",
+    "noneQueued": "Nothing to send — every valve here is already waiting on a command."
+  },
+  "manual": {
+    "search": "Search the manual…",
+    "noMatch": "Nothing in the manual matches that.",
+    "steps": "Steps",
+    "videoMissing": "This video has not been installed on this PC. The written steps below cover the same ground.",
+    "01-signin": {
+      "title": "Signing in",
+      "summary": "Getting into the dashboard, and reading the main screen.",
+      "steps": [
+        "Open the i2i Control System icon on the Desktop, or browse to the office address (for example http://192.168.1.24:3000).",
+        "Type your own username and password. There are no shared logins — every command is recorded against a name.",
+        "The Dashboard shows six figures: buildings, valves, how many are on, off, unknown, and how many commands are in flight.",
+        "Unknown means the system has not heard from that valve. It does not mean the valve is closed.",
+        "The top bar shows the queue length and whether the modem is connected. If that is not green, nothing can be sent."
+      ],
+      "why": "Every action in this system switches water to somebody's home, so every action is attributable. Accounts are per person, passwords are stored one-way (they cannot be read back, only reset), and the dashboard is reachable from any PC on the office network rather than only the one with the modem in it.",
+      "watch": [
+        "The modem chip in the top bar is the single most useful indicator on the screen. Green means SMS can leave the building. Anything else means commands will queue or fail.",
+        "Unknown is not a failure. It means no gateway has told us the valve state since the system last asked.",
+        "If you forget your password it cannot be recovered — an administrator resets it. That is a property of storing passwords safely, not a missing feature.",
+        "Use the office LAN address from other PCs. localhost only works on the machine running the system."
+      ]
+    },
+    "02-roles": {
+      "title": "Roles",
+      "summary": "Admin, operator and viewer — and what each one is allowed to do.",
+      "steps": [
+        "Administrators can do everything: add TRB gateways, change settings, and manage accounts.",
+        "Operators run the system day to day — they control valves but cannot reconfigure it. They keep the Modem screen, because they are the person next to the PC when sending stops.",
+        "Viewers can see everything and change nothing. The action buttons are not shown to them.",
+        "Hiding a button is not the protection — the server refuses the command as well.",
+        "Ask an administrator to create your account, and change your password after the first sign-in."
+      ],
+      "why": "The people who run the system day to day are not the people who commission it. An operator switching a valve should not be one mis-click from changing the SMS keywords that make every gateway work.",
+      "watch": [
+        "Operators keep the Modem screen on purpose: they are the ones physically next to the PC when sending stops, and that screen is where the answer is.",
+        "Removing a button is presentation, not security. The server checks the role on every request, so a viewer cannot send a command even by other means.",
+        "Change the seeded administrator password before handover. It ships as a known default so the first person can get in.",
+        "Give people their own accounts. A shared login makes the audit log useless, which is the one thing you cannot reconstruct later."
+      ]
+    },
+    "03-buildings": {
+      "title": "Buildings and apartments",
+      "summary": "How the portfolio is organised, and how to find anything in it.",
+      "steps": [
+        "The structure mirrors the property: buildings contain apartments, apartments contain valves.",
+        "Use the search box on the Buildings screen to find a building or an apartment by name.",
+        "Opening a building shows its own counts, and a coloured bar for its valves at a glance.",
+        "Add an apartment from the form at the top of the building page.",
+        "The first six apartments are shown on the building page; use View all for the full searchable list.",
+        "Each valve is wired to one output on one TRB gateway. That link is set when the valve is added."
+      ],
+      "why": "The data mirrors the property rather than the hardware, because that is how a caretaker thinks. Nobody is asked to remember which TRB a flat is on — the system holds that link once, when the valve is added.",
+      "watch": [
+        "One TRB gateway can serve several apartments. Deleting a gateway deletes the valves wired to it, so check before removing one.",
+        "Valve codes are yours to choose. Use whatever is painted on the pipe or written on the plan, so the screen matches the building.",
+        "Deleting a building deletes its apartments and their valves. The command history stays, and shows the names as they were.",
+        "Search covers apartments as well as buildings, so a flat number alone is enough to find it."
+      ]
+    },
+    "04-control": {
+      "title": "Controlling a valve",
+      "summary": "Turning water on and off for one apartment.",
+      "steps": [
+        "Open the building, then the apartment, to see its valves.",
+        "Use Turn ON to restore supply, Turn OFF to cut it, or Check status now to ask what state the valve is in.",
+        "A progress window opens showing every step — the exact SMS text, when it was handed to the modem, and the reply.",
+        "Closing that window does not cancel anything; the command carries on in the background.",
+        "The whole exchange takes a few seconds, because an SMS has to reach the building and come back."
+      ],
+      "why": "A command is an SMS to a TRB141 in the building, which switches a relay wired to the valve. There is no internet anywhere in that path — this is why the system works during an outage, and why it takes seconds rather than milliseconds.",
+      "watch": [
+        "The progress window shows the exact text sent. If a gateway has a password, it appears as the prefix — that is normal.",
+        "Closing the window does not cancel anything. The queue is on the server, not in your browser.",
+        "Only one command per valve at a time. A second press while one is running is refused rather than queued, to prevent conflicting instructions.",
+        "Turn OFF cuts supply. On the latching relay used here, that state survives a power cut at the gateway — which is the whole reason that relay was chosen."
+      ]
+    },
+    "05-assumed": {
+      "title": "Assumed or confirmed",
+      "summary": "Why the system never claims to know more than it does.",
+      "steps": [
+        "Sending a command is not the same as knowing it worked.",
+        "The TRB switching rule does not reply, so after a Turn OFF the system knows what was asked for, not what happened.",
+        "A state that has not been verified is marked ASSUMED, and the time reads last sent rather than last confirmed.",
+        "Press Check status now to ask the gateway directly. When it answers, the mark disappears.",
+        "If you need certainty on every command, turn confirmation on in Settings — it costs a second SMS per command."
+      ],
+      "why": "The TRB rule that switches a relay does not send a reply. So after Turn OFF the system knows the SMS was accepted by the network — nothing more. Showing a confident OFF at that point would be a claim nobody verified, on a system that controls water to a home.",
+      "watch": [
+        "ASSUMED is the normal state after a command, not an error.",
+        "Only a reply from the gateway clears it. That is what Check status now is for.",
+        "The timestamp wording changes with it: last sent versus last confirmed. Read that line before trusting a state.",
+        "Turning confirmation on in Settings makes every command verify itself, at the cost of a second SMS each time. On a prepaid SIM that doubles the running cost.",
+        "If a resident disputes whether their water was cut, the command history plus the confirmed state is the evidence — an assumed state is not."
+      ]
+    },
+    "06-stop": {
+      "title": "Stopping and queueing",
+      "summary": "What to do when you change your mind, and why one valve takes one command at a time.",
+      "steps": [
+        "While a command is running, Stop appears in its progress window.",
+        "Stop gives up on waiting for the reply. It cannot recall an SMS that has already left — the valve may still act.",
+        "For that reason a stopped command is recorded as stopped, never as failed, and the valve state becomes unknown.",
+        "Check the status afterwards to find out what actually happened.",
+        "A second command on the same valve is refused while one is in flight — this prevents conflicting instructions."
+      ],
+      "why": "GSM has no recall. Once the modem has handed a message to the network it is gone, so the honest scope of Stop is narrow and the system says so rather than implying more.",
+      "watch": [
+        "Stop on a command still waiting in the queue genuinely prevents it — no SMS is sent and nothing is spent.",
+        "Stop on a command already sent only stops us waiting. The valve may still act seconds later.",
+        "That is why a stopped command is recorded as stopped, never failed, and the valve becomes unknown rather than reverting.",
+        "Always follow a Stop with Check status now if the valve matters.",
+        "Stop all on a building cancels everything not yet sent, which on a large building is most of the batch."
+      ]
+    },
+    "07-bulk": {
+      "title": "Sending to a whole building",
+      "summary": "One command to every valve, and what happens when a gateway is down.",
+      "steps": [
+        "On a building page, choose the command and press Send to all.",
+        "There is one modem, so the valves are done one at a time, in order. Expect a few seconds each.",
+        "Each valve appears as its own row with its result, so you can see exactly where it has got to.",
+        "If a TRB stops answering, the system gives up on it after a few failures and skips its remaining valves instead of spending an SMS on each one.",
+        "Skipped valves are listed, and the gateway is raised on the Alerts screen.",
+        "Fix the gateway, then send again — the skip only applies to that run.",
+        "Stop all cancels everything not yet sent."
+      ],
+      "why": "There is one modem and one SIM, so there is one lane. A building send is the same single-file queue, not a parallel broadcast — which is why it takes a few seconds per valve and why the order on screen is the real order.",
+      "watch": [
+        "Estimate a few seconds per valve. A forty-valve building is several minutes.",
+        "Each row shows the gateway's own words, which is what tells you whether to check credit, coverage or wiring.",
+        "After a few consecutive failures from one gateway, the rest of its valves are skipped rather than each spending an SMS and a full timeout.",
+        "Skipped is not failed. Nothing was sent and nothing was spent on those valves.",
+        "The skip lasts for that run only. Fix the gateway and send again — it gets a fair try.",
+        "The threshold is set in Settings. Set it to 0 if you would rather every valve were always attempted.",
+        "Check Alerts afterwards: a skipped gateway is marked unreachable there."
+      ]
+    },
+    "08-queue": {
+      "title": "Queue and history",
+      "summary": "Everything that happened, and how to find one thing in it.",
+      "steps": [
+        "The Command Queue shows what is being sent now and what is waiting.",
+        "Narrow the list by date, building, TRB gateway, or status.",
+        "The valve, building and TRB in each row are links — they take you straight to that item.",
+        "Logs is the permanent record, with the same filters and an export to a spreadsheet.",
+        "Every command is stored against the person who sent it."
+      ],
+      "why": "Two screens, two jobs. The queue answers what is happening right now; the logs answer what happened and who did it. Both read the same records, so they can never disagree.",
+      "watch": [
+        "Filter by TRB gateway when one device is misbehaving — that is the fastest way to see its whole history.",
+        "The date filter uses your local day, so Today means today in Qatar.",
+        "Export to CSV before any conversation about billing or a dispute. It includes the exact SMS text and the reply.",
+        "A row about a deleted valve still shows the name it had. The history outlives the equipment, which is the point.",
+        "The queue keeps the most recent commands; the logs keep everything."
+      ]
+    },
+    "09-modem": {
+      "title": "The modem",
+      "summary": "The first screen to open when nothing is sending.",
+      "steps": [
+        "The dashboard does not talk to the modem directly — a separate worker program owns the COM port.",
+        "The Worker connection line says whether that program is running. If it is not, nothing can be sent.",
+        "Device details show exactly what is attached: model, IMEI, firmware, and which COM port.",
+        "A SIM7600 exposes several ports; only the AT port accepts commands. The port name is shown so you can confirm it.",
+        "Network details show the operator, signal, registration, and the SMS centre. A blank SMS centre means sends will fail.",
+        "A SIM does not store its own number, so it is recorded here by hand once — send a test SMS and read the number it arrived from.",
+        "Watch message storage. If the SIM fills up, the network silently stops delivering replies.",
+        "Rescan looks for the modem again. Test SMS proves the whole chain with one real message."
+      ],
+      "why": "The dashboard and the modem are two separate programs on purpose. The worker owns the serial port full time, so it can watch for incoming replies whether or not anyone has a browser open. This screen is the seam between them, and most faults are visible here.",
+      "watch": [
+        "Work down the screen. Worker not running is a different problem from modem not found, which is different again from SIM not registered.",
+        "A SIM7600 exposes four or five COM ports and only the AT one accepts commands. Pointing at the Diagnostics port looks exactly like a dead modem.",
+        "A blank SMS centre makes every send fail with no useful error. It should show the operator's number.",
+        "Message storage is the quiet killer. A SIM holds around twenty messages; once full, the network stops delivering replies and nothing anywhere reports an error.",
+        "A SIM does not store its own number. Send a test SMS, read the number it arrived from, and record it here once.",
+        "If commands fail with a network error while the modem looks perfect, check the SIM has main balance — bundles and packages usually do not cover SMS."
+      ]
+    },
+    "10-settings": {
+      "title": "Settings and alerts",
+      "summary": "Matching the system to the gateways in the field.",
+      "steps": [
+        "Settings is administrators only. The keywords here must match the TRB SMS rules exactly, or nothing works.",
+        "Reply tokens are what the system looks for in a reply to decide whether a valve is on or off.",
+        "Pacing controls the gap between sends, how many times to retry, and how long to wait for a reply.",
+        "Confirmation is a real trade: on, every command costs two SMS but the state is verified; off, it costs one and the state is marked assumed.",
+        "The skip threshold decides when to give up on a gateway that is not answering, instead of trying every valve behind it.",
+        "Alerts gathers unreachable gateways, valves stuck unknown, and recent failed commands in one place.",
+        "Check Alerts after any bulk send that reported skipped valves."
+      ],
+      "why": "Everything that varies between deployments lives here rather than in code, because the person who needs to change it on site is not going to edit a program. The keywords in particular are a contract with the TRB devices: both ends must say the same word.",
+      "watch": [
+        "Keywords must match the TRB SMS rules character for character. A mismatch produces a silent non-response, not an error.",
+        "The Modem screen warns if the dashboard and the worker disagree about keywords. Take that warning seriously.",
+        "Send gap exists because one modem cannot send two messages at once. Lowering it too far causes failures, not speed.",
+        "Confirmation doubles SMS cost per command. Decide it deliberately against the SIM budget.",
+        "Reset all data is exactly what it says and cannot be undone.",
+        "Demo mode is for showing the dashboard with no hardware. Every event it produces is labelled DEMO. Never leave it on."
+      ]
+    },
+    "11-arabic": {
+      "title": "Arabic, dark mode and phones",
+      "summary": "The same system, in the language and on the device that suits you.",
+      "steps": [
+        "Use the language button in the top bar to switch between English and Arabic.",
+        "Arabic is not only translated — the whole layout flips to right-to-left, including the menu and the tables.",
+        "The choice is remembered for each person.",
+        "The theme button switches between light and dark.",
+        "The dashboard works on a phone: the menu folds away and controls stack instead of running off the edge.",
+        "Use the office LAN address shown when the system starts, not localhost, from any other device."
+      ],
+      "why": "The people using this in Qatar are not all reading English, and the system may sit on a wall display or be reached from a phone in a corridor. None of that should be a different product.",
+      "watch": [
+        "Arabic is a full right-to-left layout, not a translated English one — the menu, tables and controls all mirror.",
+        "Language and theme are remembered per person, not per machine.",
+        "On a phone the sidebar becomes a menu button and action buttons stack instead of running off the screen.",
+        "Numbers and SIM numbers stay left-to-right in Arabic, so they are never displayed reversed.",
+        "From a phone or another PC, use the office LAN address the launcher prints, not localhost."
+      ]
+    },
+    "why": "Why it works this way",
+    "watch": "Worth knowing",
+    "12-addtrb": {
+      "title": "Adding a TRB gateway",
+      "summary": "Registering a new device and wiring it to an apartment — what you do once per TRB, on the day it goes in.",
+      "why": "A gateway is the only thing in this system with an address. Every command is an SMS to a TRB's SIM, and a valve is simply a relay output on one of those devices. Registering the gateway and wiring a valve to it is what turns a box on a wall into an apartment you can control from the dashboard. Doing it through the guided setup keeps the three pieces — device, place, valve — in step, which is where hand-entry usually goes wrong.",
+      "steps": [
+        "Sign in as an administrator. Operators and viewers cannot add gateways.",
+        "Open Gateways, then Guided setup.",
+        "Give the gateway a name you will recognise later — the building and position, not a serial number. For example GW-MANSOURA-04.",
+        "Enter the SIM number that is physically in the TRB. This is the address every command will be sent to, so check it against the SIM card holder.",
+        "Local formats are accepted: type 055 123 4567 and it becomes +974551234567 when you leave the field.",
+        "If the TRB's SMS rules use By router admin password, enter that password. Leave it blank for No authorization. It is added to the front of every command sent to this device.",
+        "Step two offers to ping the device to prove it answers. Run this on a real installation — it is the only way to know the SIM, the signal and the rules are all correct before you rely on it.",
+        "Step three wires the gateway to a place. Choose an existing building, or type a new name and press Add without leaving the wizard.",
+        "Do the same for the apartment.",
+        "Enter the valve code — whatever is written on the pipe or the plan, so the screen matches the building.",
+        "Press Add this valve. Repeat for any other valves on the same gateway, then press Finish.",
+        "The apartment can now be controlled from the Buildings screen."
+      ],
+      "watch": [
+        "The SIM number is the one thing that must be exactly right. A wrong digit produces a gateway that never answers, which looks identical to a broken device.",
+        "The name is for humans only. Nothing is sent over the air from it, so make it descriptive.",
+        "The auth password must match the TRB's SMS rules exactly. If the rules say No authorization, leaving it blank is correct — a password set here would be sent as part of the keyword and the device would ignore the whole message.",
+        "Do not skip the verify step on a real install. It costs one SMS and proves the entire chain — modem, network, SIM, device, rules — before anyone depends on it.",
+        "This deployment drives the TRB's latching relay, so a valve keeps its state through a power cut at the gateway. The dashboard does not choose the relay; the Action target in the TRB's own rule does.",
+        "One gateway can serve several apartments. Wire them all in step three rather than adding the gateway twice.",
+        "Deleting a gateway deletes the valves wired to it. The command history stays.",
+        "In the video the modem chip reads offline because that recording machine had no worker running. On a working install it is green."
+      ]
+    }
   }
 }

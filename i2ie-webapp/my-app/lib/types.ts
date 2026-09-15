@@ -23,7 +23,8 @@ export type CommandStatus =
   | "failed" // send error after all retries
   | "no_response" // no reply within the timeout
   | "unconfirmed" // Settings.confirmAfterCommand was off — sent, never checked
-  | "cancelled"; // an operator stopped waiting. The SMS may still have gone out.
+  | "cancelled" // an operator stopped waiting. The SMS may still have gone out.
+  | "skipped"; // its gateway had already failed repeatedly — NOT sent, no SMS spent
 
 export interface User {
   id: number;
@@ -122,6 +123,16 @@ export interface CommandLog extends Command {
   unitName: string;
   buildingName: string;
   simNumber: string;
+  /** The TRB this valve is wired to — shown, and filterable by. */
+  gatewayLabel: string;
+  /*
+   * Ids as well as names, so a row can be BOTH filtered and followed.
+   * Null when the referenced row has since been deleted: command history
+   * outlives the valve it describes, which is the point of an audit log.
+   */
+  gatewayId: number | null;
+  buildingId: number | null;
+  unitId: number | null;
 }
 
 /** Aggregate numbers for the dashboard stat tiles. */
@@ -154,6 +165,8 @@ export type ActivityKind =
   | "failed" // send failed after retries
   | "unconfirmed" // sent with confirmation intentionally skipped
   | "cancelled" // an operator stopped waiting on a command
+  | "skipped" // not sent: its gateway was already failing
+  | "gatewayDown" // a gateway crossed the failure threshold and was skipped
   | "ping"; // gateway reachability check
 
 export interface ActivityEvent {
@@ -232,6 +245,20 @@ export interface Settings {
   // TRB141 rules must authorise and what a resident sees a message come
   // from, so it is worth having on screen instead of in someone's head.
   modemNumber: string | null;
+
+  /*
+   * Give up on a gateway after this many consecutive failures, and skip its
+   * remaining queued valves instead of sending to each one.
+   *
+   * A TRB that is off, out of coverage, or has a dead SIM fails identically
+   * for every valve behind it. Without this, a bulk send to a 20-valve
+   * building with one dead TRB spends 20 SMS and 20 reply timeouts to learn
+   * the same fact twenty times — slow, and real money on a prepaid SIM.
+   *
+   * 0 disables skipping entirely, for an operator who would rather every
+   * valve were attempted no matter what.
+   */
+  skipAfterFailures: number;
 
   // Simulate every command instead of sending it: random outcomes, random
   // timing, no SMS. Opt-in and off by default, because it used to be

@@ -12,13 +12,31 @@
  * in parallel, it just fills this same single lane faster.
  */
 
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import {
+  applyFilters,
+  EMPTY_FILTERS,
+  RecordFilters,
+  type FilterState,
+} from "@/components/filters/RecordFilters";
+import {
+  BuildingLink,
+  GatewayLink,
+  ValveLink,
+} from "@/components/filters/RecordLinks";
+import { BulkSendProgress } from "@/components/valve/BulkSendProgress";
 import { onAppEvent } from "@/lib/socket";
 import { debounce } from "@/lib/debounce";
 import { useAuth } from "@/lib/auth";
-import type { BuildingStats, CommandAction, CommandLog, Settings } from "@/lib/types";
+import type {
+  BuildingStats,
+  Command,
+  CommandAction,
+  CommandLog,
+  Settings,
+} from "@/lib/types";
 import { Button, Card, StatusChip } from "@/components/ui";
 import { IconChevronDown, IconDrop, IconQueue, IconSend, IconSpinner, IconX } from "@/components/icons";
 
@@ -29,6 +47,7 @@ export default function QueuePage() {
   const [queued, setQueued] = useState(0);
   const [processingId, setProcessingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [filters, setFilters] = useState<FilterState>(EMPTY_FILTERS);
 
   useEffect(() => {
     void api.commands.list(50).then(setRows);
@@ -51,6 +70,8 @@ export default function QueuePage() {
       offs.forEach((off) => off());
     };
   }, []);
+
+  const filtered = useMemo(() => applyFilters(rows, filters), [rows, filters]);
 
   const fmtTime = (iso: string) =>
     new Date(iso).toLocaleTimeString(
@@ -87,12 +108,29 @@ export default function QueuePage() {
           </Card>
         </div>
 
+        {/* Same filter bar as Logs and Alerts - see RecordFilters. */}
+        {rows.length > 0 && (
+          <RecordFilters
+            value={filters}
+            onChange={setFilters}
+            rows={rows}
+            resultCount={filtered.length}
+          />
+        )}
+
         {/* Lifecycle table */}
         <Card>
           {rows.length === 0 ? (
             <p className="px-5 py-10 text-center text-sm text-ink-3">
               {t("queue.empty")}
             </p>
+          ) : filtered.length === 0 ? (
+            /* "No commands yet" would be a lie when there are commands and a
+               filter is hiding them - and it hides the way out, too. */
+            <div className="px-5 py-10 text-center">
+              <p className="text-sm text-ink-3">{t("filters.none")}</p>
+              <p className="mt-1 text-xs text-ink-3">{t("filters.noneHint")}</p>
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -111,7 +149,7 @@ export default function QueuePage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-hairline">
-                  {rows.map((row) => {
+                  {filtered.map((row) => {
                     const hasEvents = (row.events?.length ?? 0) > 0;
                     const inFlight = row.status === "sent";
                     // In-flight commands auto-expand — you shouldn't have to
@@ -141,12 +179,29 @@ export default function QueuePage() {
                             {fmtTime(row.createdAt)}
                           </td>
                           <td className="px-4 py-2.5 font-medium text-ink">
-                            {row.valveCode}
+                            <ValveLink
+                              valveId={row.valveId}
+                              unitId={row.unitId}
+                              buildingId={row.buildingId}
+                              valveCode={row.valveCode}
+                            />
                             <span className="block text-xs font-normal text-ink-3">
                               {row.unitName}
                             </span>
                           </td>
-                          <td className="px-4 py-2.5 text-ink-2">{row.buildingName}</td>
+                          <td className="px-4 py-2.5 text-ink-2">
+                            <BuildingLink
+                              buildingId={row.buildingId}
+                              buildingName={row.buildingName}
+                            />
+                            <span className="block text-xs text-ink-3">
+                              <GatewayLink
+                                gatewayId={row.gatewayId}
+                                gatewayLabel={row.gatewayLabel}
+                                className="text-ink-3 hover:text-brand hover:underline"
+                              />
+                            </span>
+                          </td>
                           <td className="px-4 py-2.5 text-ink-2">
                             {t(`action.${row.action}`)}
                           </td>
@@ -219,6 +274,19 @@ function BulkSendPanel() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
+  /*
+   * The batch, plus the valve codes to name its rows.
+   *
+   * The bulk panel spans several buildings, so unlike the building card it
+   * has no valve list already to hand — the labels are collected from the
+   * same fetch that gathers the ids, rather than fetched twice.
+   */
+  const [batch, setBatch] = useState<Command[]>([]);
+  const [valveNames, setValveNames] = useState<Map<number, string>>(new Map());
+  const labelFor = useCallback(
+    (valveId: number) => valveNames.get(valveId) ?? `#${valveId}`,
+    [valveNames]
+  );
 
   useEffect(() => {
     // Only buildings with at least one valve are worth offering here — an
@@ -260,9 +328,16 @@ function BulkSendPanel() {
       const valveLists = await Promise.all(
         selectedBuildings.map((b) => api.valves.listByBuilding(b.id))
       );
-      const valveIds = valveLists.flat().map((v) => v.id);
+      const allValves = valveLists.flat();
+      setValveNames(new Map(allValves.map((v) => [v.id, v.valveCode])));
+      const valveIds = allValves.map((v) => v.id);
       const queuedCommands = await api.valves.queueBulkCommand(valveIds, action);
-      setResult(t("queue.bulkQueued", { count: queuedCommands.length }));
+      setBatch(queuedCommands);
+      setResult(
+        queuedCommands.length === 0
+          ? t("bulk.noneQueued")
+          : t("queue.bulkQueued", { count: queuedCommands.length })
+      );
       setSelected(new Set());
     } finally {
       setSending(false);
@@ -338,6 +413,10 @@ function BulkSendPanel() {
         <p className="mb-3 text-xs text-ink-3">
           {t("queue.bulkEstimate", { count: valveCount, time: estimateLabel })}
         </p>
+      )}
+
+      {batch.length > 0 && (
+        <BulkSendProgress commands={batch} labelFor={labelFor} />
       )}
 
       {result && (

@@ -59,7 +59,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const pathname = usePathname();
   const active = activeNavItem(pathname);
 
-  // Live queue length — pushed from the (mock) socket layer.
+  // Live queue length — pushed over SSE from the queue engine.
   const [queued, setQueued] = useState(0);
   useEffect(
     () => onAppEvent("queue:update", (p) => setQueued(p.queued + (p.processingId ? 1 : 0))),

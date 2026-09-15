@@ -8,9 +8,11 @@
  * rest of this project follows.
  */
 
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Card } from "@/components/ui";
+import { api } from "@/lib/api";
+import { VideoManual } from "@/components/guide/VideoManual";
 import { IconAlert, IconCheck, IconLock, IconRadio, IconValve } from "@/components/icons";
 
 function Callout({
@@ -94,10 +96,177 @@ function OutputFlow({
   );
 }
 
-export default function GuidePage() {
+/**
+ * The three SMS Utilities rules, laid out the way the TRB141's own form asks
+ * for them, so a technician can copy this screen field by field instead of
+ * translating prose into a web UI.
+ *
+ * The keywords are read LIVE from Settings rather than hard-coded. Keyword
+ * drift between this dashboard and the device is the single most common way
+ * a gateway ends up silently ignoring every command, and a printed sheet
+ * showing "valveon" while Settings says something else would cause exactly
+ * the bug the sheet exists to prevent. If the fetch fails we show the
+ * defaults and say so, rather than showing them as if they were confirmed.
+ */
+function RuleSheet() {
   const { t } = useTranslation();
+  const [keywords, setKeywords] = useState<{
+    open: string;
+    close: string;
+    status: string;
+  } | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    api.settings
+      .get()
+      .then((s) => {
+        if (!alive) return;
+        setKeywords({
+          open: s.keywordOpen,
+          close: s.keywordClose,
+          status: s.keywordStatus,
+        });
+      })
+      .catch(() => {
+        /* Falls through to the defaults + a warning. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const live = keywords !== null;
+  const kw = keywords ?? { open: "valveon", close: "valveoff", status: "iostatus" };
+
+  const columns = [
+    {
+      head: t("guide.ruleRule1"),
+      keyword: kw.open,
+      action: t("guide.ruleActionIo"),
+      target: t("guide.ruleTargetLatching"),
+      state: t("guide.ruleStateClosed"),
+      message: "—",
+    },
+    {
+      head: t("guide.ruleRule2"),
+      keyword: kw.close,
+      action: t("guide.ruleActionIo"),
+      target: t("guide.ruleTargetLatching"),
+      state: t("guide.ruleStateOpen"),
+      message: "—",
+    },
+    {
+      head: t("guide.ruleRule3"),
+      keyword: kw.status,
+      action: t("guide.ruleActionStatus"),
+      target: "—",
+      state: "—",
+      message: "Relay - %rl",
+    },
+  ];
+
+  const rows: { label: string; pick: (c: (typeof columns)[number]) => string; mono?: boolean }[] = [
+    { label: t("guide.ruleRowKeyword"), pick: (c) => c.keyword, mono: true },
+    { label: t("guide.ruleRowAction"), pick: (c) => c.action },
+    { label: t("guide.ruleRowTarget"), pick: (c) => c.target },
+    { label: t("guide.ruleRowState"), pick: (c) => c.state },
+    { label: t("guide.ruleRowMessage"), pick: (c) => c.message, mono: true },
+    { label: t("guide.ruleRowAuth"), pick: () => t("guide.ruleAuthNone") },
+  ];
 
   return (
+    <Card className="p-5">
+      <div className="mb-1 flex items-center gap-2">
+        <IconRadio size={16} className="text-brand" />
+        <h2 className="text-sm font-semibold text-ink">{t("guide.ruleSheetTitle")}</h2>
+      </div>
+      <p className="mb-3 text-sm leading-relaxed text-ink-2">{t("guide.ruleSheetBody")}</p>
+
+      {/* Wide content on a narrow screen scrolls itself, never the page. */}
+      <div className="-mx-1 mb-3 overflow-x-auto px-1">
+        <table className="w-full min-w-[34rem] border-collapse text-xs" dir="ltr">
+          <thead>
+            <tr>
+              <th className="border-b border-edge py-2 pe-3 text-start font-medium text-ink-3">
+                {t("guide.ruleColField")}
+              </th>
+              {columns.map((c) => (
+                <th
+                  key={c.head}
+                  className="border-b border-edge px-3 py-2 text-start font-semibold text-ink"
+                >
+                  {c.head}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => (
+              <tr key={row.label}>
+                <td className="border-b border-hairline py-2 pe-3 align-top text-ink-3">
+                  {row.label}
+                </td>
+                {columns.map((c) => (
+                  <td
+                    key={c.head}
+                    className={`border-b border-hairline px-3 py-2 align-top text-ink-2 ${
+                      row.mono ? "font-mono" : ""
+                    }`}
+                  >
+                    {row.pick(c)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="space-y-2">
+        <Callout tone={live ? "good" : "warn"}>
+          {live ? t("guide.ruleSheetLive") : t("guide.ruleSheetFallback")}
+        </Callout>
+        <Callout tone="warn">{t("guide.ruleSheetOneRelay")}</Callout>
+        <p className="text-xs leading-relaxed text-ink-3">{t("guide.ruleSheetAuthNote")}</p>
+      </div>
+    </Card>
+  );
+}
+
+export default function GuidePage() {
+  const { t } = useTranslation();
+  /*
+   * Two halves, deliberately in this order.
+   *
+   * "How do I use the dashboard" is the question almost everyone arrives
+   * with, so the video manual comes first. The TRB141 hardware reference
+   * below it is for the one person commissioning a gateway — important, but
+   * consulted far less often.
+   */
+  const [tab, setTab] = useState<"manual" | "hardware">("manual");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex gap-1 border-b border-hairline">
+        {(["manual", "hardware"] as const).map((k) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`-mb-px border-b-2 px-3.5 py-2 text-sm font-medium transition-colors ${
+              tab === k
+                ? "border-brand text-brand"
+                : "border-transparent text-ink-3 hover:text-ink-2"
+            }`}
+          >
+            {t(`guide.tab_${k}`)}
+          </button>
+        ))}
+      </div>
+
+      {tab === "manual" && <VideoManual />}
+
+      {tab === "hardware" && (
     <div className="max-w-3xl space-y-4">
       <p className="text-sm leading-relaxed text-ink-2">{t("guide.intro")}</p>
 
@@ -155,6 +324,15 @@ export default function GuidePage() {
         <p className="text-sm leading-relaxed text-ink-2">{t("guide.relayTrapBody")}</p>
       </Card>
 
+      {/*
+        The field sheet sits directly after the "which relay" cards and
+        before the prose steps on purpose: by this point the reader knows
+        WHICH relay and WHY, and what they want next is the literal set of
+        values to type. The steps below explain the same three rules in
+        sentences for whoever is reading rather than doing.
+      */}
+      <RuleSheet />
+
       <Card className="p-5">
         <div className="mb-1 flex items-center gap-2">
           <IconRadio size={16} className="text-brand" />
@@ -211,8 +389,17 @@ export default function GuidePage() {
           <li>{t("guide.check3")}</li>
           <li>{t("guide.check4")}</li>
           <li>{t("guide.check5")}</li>
+          {/*
+            The acceptance test for the latching-relay decision. Everything
+            above can pass while the rule is quietly pointed at the plain
+            relay (3,4,5) — the two look identical until the power drops,
+            which is the one moment this project cannot afford to get wrong.
+          */}
+          <li>{t("guide.check6")}</li>
         </ol>
       </Card>
+    </div>
+      )}
     </div>
   );
 }

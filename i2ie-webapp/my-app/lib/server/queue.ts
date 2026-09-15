@@ -14,7 +14,9 @@
 
 import type { Repo } from "./repo";
 import { broadcast } from "./events";
-import type { Command, CommandAction, CommandStatus, PingResult, Valve, ValveStatus } from "../types";
+import type { Command, CommandAction, CommandStatus, PingResult, Valve, ValveStatus,
+  CommandEvent,
+} from "../types";
 import { DEFAULT_WORKER_URL, describeWorkerError } from "../workerStatus";
 
 /**
@@ -47,6 +49,36 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 export function createQueueEngine(repo: Repo) {
   const pending: number[] = []; // command ids waiting for the lane
+
+  /*
+   * Consecutive failures per gateway, and what the lane does about them.
+   *
+   * A TRB that is powered off, out of coverage, or has a dead SIM fails the
+   * same way for every valve wired to it. Learning that once and skipping
+   * the rest is the difference between a bulk send that reports a problem
+   * in fifteen seconds and one that spends twenty SMS and twenty reply
+   * timeouts rediscovering it — on a prepaid SIM, that is real money.
+   *
+   * Counted per gateway, not per valve, because the gateway is the thing
+   * that is actually unreachable. Reset to zero by any success, so a
+   * gateway that comes back is used again immediately with no intervention.
+   */
+  const gatewayFailures = new Map<number, number>();
+
+  function noteGatewayOutcome(gatewayId: number | null, ok: boolean) {
+    if (gatewayId === null) return;
+    if (ok) {
+      gatewayFailures.delete(gatewayId);
+      return;
+    }
+    gatewayFailures.set(gatewayId, (gatewayFailures.get(gatewayId) ?? 0) + 1);
+  }
+
+  /** Has this gateway failed often enough that we should stop trying? */
+  function shouldSkipGateway(gatewayId: number | null, threshold: number): boolean {
+    if (gatewayId === null || threshold <= 0) return false;
+    return (gatewayFailures.get(gatewayId) ?? 0) >= threshold;
+  }
   let processing = false;
   let processingId: number | null = null;
 
@@ -218,7 +250,64 @@ export function createQueueEngine(repo: Repo) {
       emitQueueState();
       await sleep(repo.getSettings().sendGapMs);
     }
+    /*
+     * The lane is empty, so forget every gateway's failure history.
+     *
+     * Skipping exists to stop ONE bulk run wasting SMS on a TRB that is
+     * plainly down — it is not a blacklist. Without this reset the counter
+     * only ever grows: a gateway that failed three times this morning would
+     * be skipped without a single attempt for the rest of the day, because
+     * a skipped command never succeeds and so can never clear the count.
+     * The operator has very likely just gone and fixed the thing; the next
+     * time they press send, it gets a fair try.
+     */
+    gatewayFailures.clear();
     processing = false;
+  }
+
+  /**
+   * Resolves a command without sending it, because its gateway has already
+   * failed repeatedly in this run.
+   *
+   * Deliberately its own status rather than "failed": nothing was attempted,
+   * no SMS was spent, and the valve's state is not in doubt because of this
+   * command. Calling it failed would blame the valve for the gateway, and
+   * would put a fabricated send in the audit log.
+   */
+  function skipForDeadGateway(command: Command, valve: Valve, gatewayLabel: string) {
+    const events = [
+      {
+        ts: now(),
+        message:
+          `Not sent. ${gatewayLabel} has not answered the last several commands, so the rest of its valves were skipped. Fix the gateway, then send again.`,
+      },
+    ];
+    repo.updateCommand(command.id, {
+      status: "skipped",
+      replyText: null,
+      replyAt: now(),
+      events,
+    });
+    finishValvePending(valve);
+    logActivity("skipped", valve, command.userName, command.action, null);
+    emitCommand({ ...command, status: "skipped", events });
+  }
+
+  /**
+   * Records that a gateway has crossed the failure threshold — once.
+   *
+   * Marking it unreachable is what makes a failing bulk run visible on the
+   * Alerts screen. Previously reachability was only ever written by an
+   * explicit Ping, so a gateway could fail every command all day and still
+   * show as "unknown" with nothing raised anywhere.
+   */
+  function markGatewayDownIfOverThreshold(valve: Valve) {
+    const threshold = repo.getSettings().skipAfterFailures;
+    if (!shouldSkipGateway(valve.gatewayId, threshold)) return;
+    const gateway = repo.getGateway(valve.gatewayId);
+    if (!gateway || gateway.reachability === "unreachable") return; // already said so
+    repo.setGatewayReachability(valve.gatewayId, "unreachable", false);
+    logActivity("gatewayDown", valve, null, null, null);
   }
 
   async function processOne(commandId: number) {
@@ -228,6 +317,17 @@ export function createQueueEngine(repo: Repo) {
     if (!valve) return;
 
     const settings = repo.getSettings();
+
+    /*
+     * The skip check happens HERE, at the head of the lane, rather than when
+     * the batch was queued — because the failures that justify skipping
+     * mostly happen after queueing, while the batch is draining.
+     */
+    if (shouldSkipGateway(valve.gatewayId, settings.skipAfterFailures)) {
+      const gateway = repo.getGateway(valve.gatewayId);
+      skipForDeadGateway(command, valve, gateway?.label ?? "That gateway");
+      return;
+    }
     /*
      * Simulation happens ONLY when someone asked for it.
      *
@@ -384,6 +484,9 @@ export function createQueueEngine(repo: Repo) {
       if (record.status === "success" && record.relayState && record.relayState !== "unknown") {
         repo.setValveStatus(valve.id, record.relayState, true);
         if (valve.gatewayId) repo.setGatewayReachability(valve.gatewayId, "ok", true);
+        // A real reply is proof the gateway is alive: forgive its history so
+        // one that recovers is used again immediately.
+        noteGatewayOutcome(valve.gatewayId, true);
         finishValvePending(valve);
         broadcast("valve:update", { valve: { ...valve, lastStatus: record.relayState, statusVerified: true, pendingCommandId: null }, source: "reply" });
         logActivity("reply", valve, userName, action, record.relayState);
@@ -397,15 +500,87 @@ export function createQueueEngine(repo: Repo) {
         logActivity("unconfirmed", valve, userName, action, assumedStatus);
       } else if (record.status === "no_response") {
         repo.setValveStatus(valve.id, "unknown", false);
+        // Silence is the signature of a gateway that is off or out of
+        // coverage — the failure this whole mechanism exists for.
+        noteGatewayOutcome(valve.gatewayId, false);
+        markGatewayDownIfOverThreshold(valve);
         finishValvePending(valve);
         broadcast("valve:update", { valve: { ...valve, lastStatus: "unknown", statusVerified: true, pendingCommandId: null }, source: "timeout" });
         logActivity("timeout", valve, userName, action, "unknown");
       } else {
+        noteGatewayOutcome(valve.gatewayId, false);
+        markGatewayDownIfOverThreshold(valve);
         finishValvePending(valve);
         logActivity("failed", valve, userName, action, null);
       }
     }
     emitCommand({ ...(repo.getCommand(commandId) as Command) });
+  }
+
+  /**
+   * Runs a dispatch attempt, retrying only what is safe to retry.
+   *
+   * The distinction that matters: a TRANSPORT failure (the worker is down,
+   * the connection dropped) means the request may never have arrived, so
+   * trying again risks nothing. A worker REJECTION (it answered, with 4xx/
+   * 5xx and an explanation) means it received the request and refused —
+   * retrying an out-of-credit SIM or a missing modem just spends time and,
+   * worse, could double-send if the refusal came after the SMS went out.
+   *
+   * So: retry transport failures, surface rejections immediately.
+   *
+   * Every attempt is recorded in `events` so the operator sees the retries
+   * rather than an unexplained delay.
+   */
+  /**
+   * Is this failure proof that the request never reached the worker?
+   *
+   * This is the question that decides whether a retry is safe, and it is not
+   * a detail. If the worker DID receive the request, it may already have put
+   * an SMS on the air — and retrying would actuate the valve a second time.
+   * GSM has no recall, so a wrong answer here cuts or restores water twice.
+   *
+   * A refused or unresolvable connection means nothing was ever processed:
+   * there was no listener to process it. Anything else — a reset, a socket
+   * closing mid-response, an unknown transport error — is AMBIGUOUS, and
+   * ambiguity is treated as "may have sent" and never retried.
+   */
+  function neverReachedWorker(err: unknown): boolean {
+    const code = (err as { cause?: { code?: string } })?.cause?.code;
+    return code === "ECONNREFUSED" || code === "ENOTFOUND" || code === "EAI_AGAIN";
+  }
+
+  async function withRetries(
+    maxRetries: number,
+    events: CommandEvent[],
+    attempt: () => Promise<Response>
+  ): Promise<Response> {
+    let lastError: unknown;
+    for (let i = 0; i <= maxRetries; i++) {
+      if (i > 0) {
+        events.push({
+          ts: now(),
+          message: `Could not reach the worker — retrying (${i} of ${maxRetries})...`,
+        });
+        // Linear back-off: a worker that is restarting needs a moment, and
+        // hammering it does not help.
+        await sleep(1000 * i);
+      }
+      try {
+        const res = await attempt();
+        // A response - even an error response - means the worker heard us.
+        // That is not something to retry.
+        if (!res.ok) return res;
+        if (i > 0) events.push({ ts: now(), message: "Retry succeeded." });
+        return res;
+      } catch (err) {
+        lastError = err;
+        // Only a provably-unreached worker is retried. Everything else is
+        // surfaced immediately rather than risking a second actuation.
+        if (!neverReachedWorker(err)) throw err;
+      }
+    }
+    throw lastError;
   }
 
   async function processOneReal(command: Command, valve: Valve, workerUrl: string, confirmAfterCommand: boolean) {
@@ -423,8 +598,25 @@ export function createQueueEngine(repo: Repo) {
     emitCommand({ ...command, status: "sent", sentAt, events: [] });
     logActivity("sent", valve, command.userName, command.action, null);
 
+    /*
+     * Retries on the REAL path.
+     *
+     * Settings.maxRetries was only ever honoured by the simulator, so the
+     * field on the Settings screen did nothing to an actual send — a
+     * setting that lies about what the system does.
+     *
+     * Only the DISPATCH is retried, never the confirmation. A transient
+     * failure here (the worker restarting, the serial line busy with a
+     * health check) has not put an SMS on the air, so trying again is free
+     * and correct. Once the modem has accepted the message, GSM has no
+     * recall: resending would actuate the valve twice.
+     */
+    const maxRetries = Math.max(0, repo.getSettings().maxRetries);
+    const attemptEvents: CommandEvent[] = [];
+    let attempt = 0;
+
     try {
-      const res = await fetch(`${workerUrl}/send`, {
+      const res = await withRetries(maxRetries, attemptEvents, () => fetch(`${workerUrl}/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -442,7 +634,8 @@ export function createQueueEngine(repo: Repo) {
           keyword: keywordFor(command.action, valve),
           statusKeyword: keywordFor("status", valve),
         }),
-      });
+      }));
+      attempt = attemptEvents.length;
       // The worker's own words, not the status code. A 503 here means the
       // worker answered and told us the modem is missing — reporting that as
       // "could not reach the worker" sends whoever is troubleshooting to the
@@ -457,8 +650,11 @@ export function createQueueEngine(repo: Repo) {
         relayState: ValveStatus | null;
       };
 
-      repo.updateCommand(command.id, { workerTrackingId: dispatch.trackingId, events: dispatch.events });
-      emitCommand({ ...command, status: "sent", sentAt, workerTrackingId: dispatch.trackingId, events: dispatch.events });
+      // Retry notes first, then the worker's own trail: the operator should
+      // see why a send took twelve seconds, not just what happened after.
+      const events = [...attemptEvents, ...dispatch.events];
+      repo.updateCommand(command.id, { workerTrackingId: dispatch.trackingId, events, retries: attempt });
+      emitCommand({ ...command, status: "sent", sentAt, workerTrackingId: dispatch.trackingId, events, retries: attempt });
 
       if (dispatch.status !== "sent") {
         // Already resolved — e.g. confirmation was skipped, or the send
@@ -473,16 +669,37 @@ export function createQueueEngine(repo: Repo) {
       void pollWorkerStatus(command.id, dispatch.trackingId, workerUrl);
     } catch (err) {
       const error = err instanceof Error ? err.message : String(err);
-      const events = [
-        {
-          ts: now(),
-          message: err instanceof WorkerRejected ? error : `Could not reach the worker: ${error}`,
-        },
-      ];
-      repo.updateCommand(command.id, { status: "failed", replyText: error, replyAt: now(), events });
+      const events = [...attemptEvents, {
+        ts: now(),
+        message: err instanceof WorkerRejected ? error : `Could not reach the worker: ${error}`,
+      }];
+      repo.updateCommand(command.id, {
+        status: "failed",
+        replyText: error,
+        replyAt: now(),
+        // attemptEvents.length, not "attempt": the latter is only assigned
+        // once a fetch has SUCCEEDED, so on this path it is still zero and
+        // the audit log would claim no retries were made when three were.
+        retries: attemptEvents.length,
+        events,
+      });
+      /*
+       * A dispatch failure is the FASTEST signal that a gateway run is
+       * doomed — it arrives in seconds, where a no-response takes the whole
+       * reply timeout. Counting it here is what lets a bulk send give up
+       * early rather than grinding through every valve.
+       */
+      noteGatewayOutcome(valve.gatewayId, false);
+      markGatewayDownIfOverThreshold(valve);
       finishValvePending(valve);
       logActivity("failed", valve, command.userName, command.action, null);
-      emitCommand({ ...command, status: "failed", replyText: error, events });
+      emitCommand({
+        ...command,
+        status: "failed",
+        replyText: error,
+        retries: attemptEvents.length,
+        events,
+      });
     }
   }
 
@@ -549,6 +766,9 @@ export function createQueueEngine(repo: Repo) {
     await sleep(rand(1500, 3200));
     const ok = Math.random() < 0.9;
     repo.setGatewayReachability(gatewayId, ok ? "ok" : "unreachable", ok);
+    // A ping that answers is proof it is back — clear its history so the
+    // very next command is attempted rather than skipped.
+    noteGatewayOutcome(gatewayId, ok);
     logActivity("ping", null, null, null, null);
     return {
       gatewayId,
@@ -592,6 +812,10 @@ export function createQueueEngine(repo: Repo) {
       const result = await waitForPingResult(dispatch.trackingId, workerUrl, 45_000);
       const ok = result?.status === "success";
       repo.setGatewayReachability(gatewayId, ok ? "ok" : "unreachable", ok);
+      // A real reply is the strongest evidence this gateway is back. Clear
+      // its failure history so the next command is attempted, not skipped —
+      // pinging is exactly what an operator does after fixing a TRB.
+      noteGatewayOutcome(gatewayId, ok);
       logActivity("ping", null, null, null, null);
       return {
         gatewayId,

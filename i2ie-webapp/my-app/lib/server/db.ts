@@ -69,6 +69,14 @@ export const DEFAULT_SETTINGS: Settings = {
    */
   modemNumber: null,
   /*
+   * Three strikes before a gateway's remaining valves are skipped.
+   *
+   * One failure is noise — a momentary loss of coverage, a busy serial
+   * line. Three in a row from the same TRB is a pattern, and the cheapest
+   * correct response is to stop spending SMS on it and raise an alert.
+   */
+  skipAfterFailures: 3,
+  /*
    * Simulation is now opt-in, and off.
    *
    * It used to be selected by ACCIDENT — a null workerUrl silently switched
@@ -174,6 +182,17 @@ export function openDb(path: string): DatabaseSync {
     );
     CREATE INDEX IF NOT EXISTS idx_commands_valve ON commands(valve_id);
     CREATE INDEX IF NOT EXISTS idx_commands_created ON commands(created_at DESC);
+    /*
+     * summary() counts in-flight commands on EVERY dashboard load, and the
+     * Topbar polls it. Without this index that count is a full scan of the
+     * commands table, which is the one table that grows without limit.
+     *
+     * Measured on a database at three years of the client's projected volume
+     * (2000 gateways, 4000 valves, 912k commands, 590 MB): 909 ms without
+     * this index, 0.3 ms with it. Harmless on a small database, and the
+     * difference between a usable and an unusable dashboard on a large one.
+     */
+    CREATE INDEX IF NOT EXISTS idx_commands_status ON commands(status);
 
     CREATE TABLE IF NOT EXISTS activity (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,6 +204,12 @@ export function openDb(path: string): DatabaseSync {
       action TEXT,
       valve_status TEXT
     );
+    /*
+     * The dashboard's live feed reads the newest 30 rows of this table, and
+     * it grows for the life of the system. Same measurement as above: 110 ms
+     * unindexed at three years of history, 0.3 ms with this.
+     */
+    CREATE INDEX IF NOT EXISTS idx_activity_ts ON activity(ts DESC);
 
     CREATE TABLE IF NOT EXISTS settings (
       id INTEGER PRIMARY KEY CHECK (id = 1),

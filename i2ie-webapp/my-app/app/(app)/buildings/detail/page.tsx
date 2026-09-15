@@ -12,10 +12,18 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
+import { BulkSendProgress } from "@/components/valve/BulkSendProgress";
 import { onAppEvent } from "@/lib/socket";
 import { debounce } from "@/lib/debounce";
 import { useAuth } from "@/lib/auth";
-import type { BuildingStats, CommandAction, CommandLog, Unit, Valve } from "@/lib/types";
+import type {
+  BuildingStats,
+  Command,
+  CommandAction,
+  CommandLog,
+  Unit,
+  Valve,
+} from "@/lib/types";
 import { Button, Card, StatTile } from "@/components/ui";
 import { ValveStatusBar } from "@/components/charts/ValveStatusBar";
 import { CommandTrendChart } from "@/components/charts/CommandTrendChart";
@@ -290,38 +298,40 @@ function SendToBuildingCard({
   const { t } = useTranslation();
   const [action, setAction] = useState<CommandAction>("on");
   const [sending, setSending] = useState(false);
-  const [queued, setQueued] = useState<number[]>([]);
+  /*
+   * The whole Command objects, in send order — BulkSendProgress needs the
+   * per-valve status and event trail, not just a count of how many are left.
+   */
+  const [batch, setBatch] = useState<Command[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
-
-  // Live progress: how many of the commands we queued are still in flight.
-  const [done, setDone] = useState(0);
-  useEffect(() => {
-    if (queued.length === 0) return;
-    const ids = new Set(queued);
-    const settled = new Set<number>();
-    return onAppEvent("command:update", ({ command }) => {
-      if (!ids.has(command.id)) return;
-      if (command.status === "pending" || command.status === "sent") return;
-      settled.add(command.id);
-      setDone(settled.size);
-      if (settled.size === ids.size) {
-        setQueued([]);
-        onSent();
-      }
-    });
-  }, [queued, onSent]);
+  const [running, setRunning] = useState(false);
 
   const valveIds = valves.map((v) => v.id);
-  const inFlight = queued.length > 0;
+  const inFlight = running;
+
+  // Valve code by id, so the progress list can name each valve rather than
+  // showing a command number nobody recognises.
+  const labelFor = useCallback(
+    (valveId: number) =>
+      valves.find((v) => v.id === valveId)?.valveCode ?? `#${valveId}`,
+    [valves]
+  );
+
+  const handleAllSettled = useCallback(() => {
+    setRunning(false);
+    onSent();
+  }, [onSent]);
 
   async function send() {
     setSending(true);
     setNotice(null);
-    setDone(0);
     try {
       const commands = await api.valves.queueBulkCommand(valveIds, action);
-      setQueued(commands.map((c) => c.id));
-      setNotice(t("queue.bulkQueued", { count: commands.length }));
+      setBatch(commands);
+      setRunning(commands.length > 0);
+      setNotice(
+        commands.length === 0 ? t("bulk.noneQueued") : t("queue.bulkQueued", { count: commands.length })
+      );
       onSent();
     } catch (err) {
       setNotice(err instanceof Error ? err.message : String(err));
@@ -331,11 +341,13 @@ function SendToBuildingCard({
   }
 
   async function stopAll() {
-    // Cancel newest-first: the ones still queued go without an SMS at all.
-    for (const id of [...queued].reverse()) {
-      await api.commands.cancel(id).catch(() => {});
+    // Newest-first: those still queued are cancelled before they ever reach
+    // the modem, so stopping actually saves SMS rather than just hiding the
+    // progress bar.
+    for (const c of [...batch].reverse()) {
+      await api.commands.cancel(c.id).catch(() => {});
     }
-    setQueued([]);
+    setRunning(false);
     setNotice(t("buildings.sendAllStopped"));
     onSent();
   }
@@ -374,21 +386,12 @@ function SendToBuildingCard({
         )}
       </div>
 
-      {inFlight && (
-        <div className="mt-3">
-          <div className="mb-1 flex items-center justify-between text-xs text-ink-3">
-            <span>{t("buildings.sendAllProgress", { done, total: queued.length })}</span>
-            <span className="tabular-nums">
-              {Math.round((done / Math.max(1, queued.length)) * 100)}%
-            </span>
-          </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-hairline">
-            <div
-              className="h-full rounded-full bg-brand transition-all"
-              style={{ width: `${(done / Math.max(1, queued.length)) * 100}%` }}
-            />
-          </div>
-        </div>
+      {batch.length > 0 && (
+        <BulkSendProgress
+          commands={batch}
+          labelFor={labelFor}
+          onAllSettled={handleAllSettled}
+        />
       )}
 
       {notice && <p className="mt-2 text-xs text-ink-3">{notice}</p>}

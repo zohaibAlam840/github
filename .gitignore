@@ -32,9 +32,6 @@ next-env.d.ts
 # file that differs between the bench and the client, so it must never travel
 # with the code. .env.example is committed and documents every setting.
 # ---------------------------------------------------------------------------
-.env
-.env.*
-!.env.example
 
 # ---------------------------------------------------------------------------
 # Runtime data — real phone numbers, real message bodies, raw AT traffic

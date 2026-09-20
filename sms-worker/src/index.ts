@@ -21,6 +21,24 @@ async function main() {
   // Reply wording and number format vary by deployment — see commands.ts.
   configureCommands(config);
 
+  /*
+   * Announce the reply polarity on every start.
+   *
+   * This is the one setting whose loss is completely silent. It lives only
+   * in .env, which is gitignored, so a fresh clone or a redeploy onto a new
+   * machine quietly reverts to stock — and a site whose TRB rules were
+   * inverted for the client then reports every valve backwards, with nothing
+   * anywhere saying so. The symptom (a status check appearing to flip the
+   * valve) sends people looking for a bug in the dashboard instead.
+   *
+   * One line in the startup log turns that from invisible into obvious.
+   */
+  const inverted = config.replyOnPattern === "open";
+  console.log(
+    `[worker] Reply polarity: "${config.replyOnPattern}" = ON, "${config.replyOffPattern}" = OFF` +
+      (inverted ? "  <-- INVERTED for this site; TRB rules must be swapped to match" : " (stock)")
+  );
+
   const supervisor = new ModemSupervisor(config);
 
   console.log("[worker] Looking for a modem...");

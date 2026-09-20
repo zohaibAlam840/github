@@ -4,9 +4,14 @@
  * The two-message pattern this supports was proven on the bench: a TRB141
  * "Change I/O state" rule (valveon/valveoff) never replies, only "Send
  * status" (iostatus) does — and only with whatever the rule's Message text
- * template contains. Ours is set to "Relay - %rb", so the reply reports the
- * actual relay rather than the unrelated Configurable I/O pins the default
- * template shows.
+ * template contains. Ours is set to "Relay - %rl", so the reply reports the
+ * LATCHING relay this project actually drives, rather than the unrelated
+ * Configurable I/O pins the default template shows.
+ *
+ * %rl wording confirmed on the client's gateway (2026-09-15): iostatus
+ * answers "Relay - Closed" / "Relay - Open" — the same words %rb produces,
+ * which is why the reply patterns below needed no change when the project
+ * moved from the plain relay (3,4,5) to the latching one (11,12,13).
  *
  * Everything here that depends on how a particular client's devices are
  * configured is a SETTING, not a constant. On a remote installation day the

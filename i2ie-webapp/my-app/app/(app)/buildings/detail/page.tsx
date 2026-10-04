@@ -7,7 +7,7 @@
  * can't pre-enumerate client-generated ids for a dynamic path segment).
  */
 
-import { Suspense, useCallback, useEffect, useState, type FormEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslation } from "react-i18next";
@@ -24,7 +24,7 @@ import type {
   Unit,
   Valve,
 } from "@/lib/types";
-import { Button, Card, StatTile } from "@/components/ui";
+import { Button, Card, Modal, StatTile } from "@/components/ui";
 import { ValveStatusBar } from "@/components/charts/ValveStatusBar";
 import { CommandTrendChart } from "@/components/charts/CommandTrendChart";
 import { Breadcrumb } from "@/components/Breadcrumb";
@@ -286,6 +286,15 @@ function AddUnitForm({
  * an SMS already handed to the network, and says so rather than implying
  * otherwise.
  */
+/**
+ * How many valve rows the picker mounts at a time.
+ *
+ * Enough to fill the list without scrolling on a normal building, small
+ * enough that a five-hundred-valve tower does not put five hundred
+ * checkboxes into the DOM the instant the modal opens.
+ */
+const PICKER_PAGE = 50;
+
 function SendToBuildingCard({
   buildingId,
   valves,
@@ -305,16 +314,35 @@ function SendToBuildingCard({
   const [batch, setBatch] = useState<Command[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [running, setRunning] = useState(false);
+  /*
+   * Which valves this send is for. Empty on arrival, and emptied again
+   * after every send — never pre-populated from the building's valves.
+   */
+  const [selected, setSelected] = useState<Set<number>>(new Set());
+  const [picking, setPicking] = useState(false);
 
   const valveIds = valves.map((v) => v.id);
   const inFlight = running;
 
   // Valve code by id, so the progress list can name each valve rather than
   // showing a command number nobody recognises.
-  const labelFor = useCallback(
-    (valveId: number) =>
-      valves.find((v) => v.id === valveId)?.valveCode ?? `#${valveId}`,
+  /*
+   * Indexed, not scanned.
+   *
+   * labelFor and sublabelFor are called once per rendered row, and both
+   * used to .find() through the whole valve list to do it — O(n) per
+   * lookup, so O(n squared) per render. Invisible at three valves and
+   * roughly 250,000 comparisons per render at the five hundred a real
+   * tower will have.
+   */
+  const valveById = useMemo(
+    () => new Map(valves.map((v) => [v.id, v])),
     [valves]
+  );
+
+  const labelFor = useCallback(
+    (valveId: number) => valveById.get(valveId)?.valveCode ?? `#${valveId}`,
+    [valveById]
   );
 
   /*
@@ -336,10 +364,64 @@ function SendToBuildingCard({
   }, []);
   const sublabelFor = useCallback(
     (valveId: number) => {
-      const valve = valves.find((v) => v.id === valveId);
+      const valve = valveById.get(valveId);
       return valve ? gatewayLabels.get(valve.gatewayId) : undefined;
     },
-    [valves, gatewayLabels]
+    [valveById, gatewayLabels]
+  );
+
+  /*
+   * The picker's own state: a search box, and how much of the result is
+   * currently rendered.
+   *
+   * A building here is one unit with one valve, but the design target is
+   * five hundred per tower — and five hundred checkbox rows is a slow
+   * modal and an unusable list at the same time. So the list is searchable
+   * and grows in pages as it is scrolled, rather than mounting everything
+   * up front.
+   */
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [visibleCount, setVisibleCount] = useState(PICKER_PAGE);
+
+  const matches = useMemo(() => {
+    const q = pickerSearch.trim().toLowerCase();
+    if (!q) return valves;
+    return valves.filter(
+      (v) =>
+        v.valveCode.toLowerCase().includes(q) ||
+        (gatewayLabels.get(v.gatewayId) ?? "").toLowerCase().includes(q)
+    );
+  }, [valves, pickerSearch, gatewayLabels]);
+
+  // A new search is a new list — start it at the top, not wherever the
+  // previous one had been scrolled to.
+  useEffect(() => setVisibleCount(PICKER_PAGE), [pickerSearch, picking]);
+
+  const visibleValves = matches.slice(0, visibleCount);
+  const hasMore = visibleCount < matches.length;
+
+  /*
+   * Grow the list when the sentinel at the bottom scrolls into view. The
+   * modal's <ul> is the scroll container, so it has to be the observer's
+   * root — against the viewport the sentinel never intersects and the list
+   * silently stops growing.
+   */
+  const listRef = useRef<HTMLUListElement | null>(null);
+  const sentinelRef = useCallback(
+    (node: HTMLLIElement | null) => {
+      if (!node || !hasMore) return;
+      const io = new IntersectionObserver(
+        (entries) => {
+          if (entries[0]?.isIntersecting) {
+            setVisibleCount((n) => n + PICKER_PAGE);
+          }
+        },
+        { root: listRef.current, rootMargin: "120px" }
+      );
+      io.observe(node);
+      return () => io.disconnect();
+    },
+    [hasMore]
   );
 
   const handleAllSettled = useCallback(() => {
@@ -348,10 +430,21 @@ function SendToBuildingCard({
   }, [onSent]);
 
   async function send() {
+    const ids = [...selected];
+    if (ids.length === 0) return;
     setSending(true);
     setNotice(null);
     try {
-      const commands = await api.valves.queueBulkCommand(valveIds, action);
+      const commands = await api.valves.queueBulkCommand(ids, action);
+      /*
+       * Clear the ticks and close the picker the moment the batch is
+       * queued. Leaving them ticked invites the same send twice — the
+       * second one looking just as legitimate as the first — and on a
+       * screen that shuts off people's water that is worth a line of
+       * code.
+       */
+      setSelected(new Set());
+      setPicking(false);
       setBatch(commands);
       setRunning(commands.length > 0);
       setNotice(
@@ -388,20 +481,13 @@ function SendToBuildingCard({
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
-        {(["on", "off", "status"] as const).map((a) => (
-          <Button
-            key={a}
-            variant={action === a ? "primary" : "ghost"}
-            className="!px-3 !py-1.5 !text-xs"
-            disabled={inFlight}
-            onClick={() => setAction(a)}
-          >
-            {t(a === "status" ? "action.checkStatus" : `action.${a}`)}
-          </Button>
-        ))}
-        <Button className="!px-3 !py-1.5 !text-xs" disabled={sending || inFlight} onClick={send}>
-          {sending ? <IconSpinner size={13} /> : null}
-          {t("buildings.sendAll", { count: valveIds.length })}
+        <Button
+          className="!px-3 !py-1.5 !text-xs"
+          disabled={inFlight || valveIds.length === 0}
+          onClick={() => setPicking(true)}
+        >
+          <IconSend size={13} />
+          {t("buildings.chooseValves")}
         </Button>
         {inFlight && (
           <Button variant="ghost" className="!px-3 !py-1.5 !text-xs" onClick={stopAll}>
@@ -410,6 +496,137 @@ function SendToBuildingCard({
           </Button>
         )}
       </div>
+
+      {/*
+        Choosing comes before sending.
+
+        This card used to be a bare "Send to all 3" — the only possible
+        bulk was the whole building, so cutting four of five floors meant
+        five single sends. The valves are pickable now, and nothing is
+        pre-ticked: a screen that arrives with every valve already selected
+        is one stray click away from shutting off a building, and that is
+        not a mistake this system should make easy.
+      */}
+      {picking && (
+        <Modal open onClose={() => setPicking(false)} title={t("buildings.sendAllTitle")}>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              {(["on", "off", "status"] as const).map((a) => (
+                <Button
+                  key={a}
+                  variant={action === a ? "primary" : "ghost"}
+                  className="!px-3 !py-1.5 !text-xs"
+                  onClick={() => setAction(a)}
+                >
+                  {t(a === "status" ? "action.checkStatus" : `action.${a}`)}
+                </Button>
+              ))}
+            </div>
+
+            <input
+              type="search"
+              value={pickerSearch}
+              onChange={(e) => setPickerSearch(e.target.value)}
+              placeholder={t("buildings.searchValves")}
+              className="w-full rounded-lg border border-edge bg-surface px-3 py-1.5 text-sm text-ink outline-none focus:border-brand"
+            />
+
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-ink-3">
+                {t("buildings.selectedCount", { count: selected.size, total: valves.length })}
+                {pickerSearch.trim() && (
+                  <span className="ms-1.5">
+                    · {t("buildings.matchCount", { count: matches.length })}
+                  </span>
+                )}
+              </span>
+              <span className="flex gap-2">
+                {/*
+                  Select all means all MATCHES, not all valves — with a
+                  search active, selecting things the operator cannot see
+                  is how a whole tower gets shut off by accident. Selections
+                  outside the current search are preserved rather than
+                  dropped.
+                */}
+                <button
+                  type="button"
+                  className="text-brand hover:underline"
+                  onClick={() =>
+                    setSelected((prev) => new Set([...prev, ...matches.map((v) => v.id)]))
+                  }
+                >
+                  {pickerSearch.trim()
+                    ? t("buildings.selectMatches", { count: matches.length })
+                    : t("buildings.selectAll")}
+                </button>
+                <button
+                  type="button"
+                  className="text-ink-3 hover:underline"
+                  onClick={() => setSelected(new Set())}
+                >
+                  {t("buildings.selectNone")}
+                </button>
+              </span>
+            </div>
+
+            <ul
+              ref={listRef}
+              className="max-h-64 divide-y divide-hairline overflow-y-auto rounded-lg border border-edge"
+            >
+              {visibleValves.map((v) => (
+                <li key={v.id}>
+                  <label className="flex cursor-pointer items-center gap-2.5 px-3 py-2 text-sm text-ink-2 hover:bg-hairline/30">
+                    <input
+                      type="checkbox"
+                      className="accent-brand"
+                      checked={selected.has(v.id)}
+                      onChange={() =>
+                        setSelected((prev) => {
+                          const next = new Set(prev);
+                          next.has(v.id) ? next.delete(v.id) : next.add(v.id);
+                          return next;
+                        })
+                      }
+                    />
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium text-ink">{v.valveCode}</span>
+                      {sublabelFor(v.id) && (
+                        <span className="ms-1.5 text-xs text-ink-3">· {sublabelFor(v.id)}</span>
+                      )}
+                    </span>
+                  </label>
+                </li>
+              ))}
+
+              {matches.length === 0 && (
+                <li className="px-3 py-6 text-center text-xs text-ink-3">
+                  {t("buildings.noValveMatches")}
+                </li>
+              )}
+
+              {/* Scrolled into view -> the next page renders. */}
+              {hasMore && (
+                <li ref={sentinelRef} className="px-3 py-3 text-center text-xs text-ink-3">
+                  {t("buildings.loadingMoreValves", {
+                    count: matches.length - visibleValves.length,
+                  })}
+                </li>
+              )}
+            </ul>
+
+            <Button
+              className="w-full"
+              disabled={selected.size === 0 || sending}
+              onClick={send}
+            >
+              {sending ? <IconSpinner size={13} /> : null}
+              {/* "Send to all 0" was nonsense — it is a count of what is
+                  ticked, not of the building. */}
+              {t("buildings.sendSelected", { count: selected.size })}
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {batch.length > 0 && (
         <BulkSendModal

@@ -110,6 +110,22 @@ export function ValveRow({
     });
   }, [modalCommand?.id]);
 
+  /*
+   * Shared by the inline Stop on the row and the one inside the modal, so
+   * the two cannot drift apart.
+   */
+  async function stopCommand(id: number) {
+    setStopping(true);
+    try {
+      const stopped = await api.commands.cancel(id);
+      // Only touch the modal if it is the command being shown.
+      setModalCommand((cur) => (cur && cur.id === id ? stopped : cur));
+      onChanged();
+    } finally {
+      setStopping(false);
+    }
+  }
+
   async function act(action: CommandAction) {
     setBusy(true);
     try {
@@ -158,22 +174,43 @@ export function ValveRow({
           command yet, rather than offering a button that opens nothing.
         */
         command ? (
-          <button
-            type="button"
-            onClick={() => setModalCommand(command)}
-            title={t("valve.reopenProgress")}
-            className="inline-flex flex-col gap-0.5 text-start"
-          >
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface px-2.5 py-0.5 text-xs font-medium text-ink-3 transition-colors hover:border-brand hover:text-brand">
-              <IconSpinner size={13} />
-              <span className="text-ink-2">{t("status.pending")}</span>
-            </span>
-            {command.events && command.events.length > 0 && (
-              <span className="max-w-56 truncate text-xs text-ink-3">
-                {command.events.at(-1)!.message}
+          /*
+            Stop sits directly beside Pending, not only inside the modal.
+            Giving up on a reply is the one thing an operator wants while a
+            command hangs, and making them open a dialog to reach it put a
+            click between them and the only control that still does
+            anything on this row.
+          */
+          <span className="inline-flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setModalCommand(command)}
+              title={t("valve.reopenProgress")}
+              className="inline-flex flex-col gap-0.5 text-start"
+            >
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface px-2.5 py-0.5 text-xs font-medium text-ink-3 transition-colors hover:border-brand hover:text-brand">
+                <IconSpinner size={13} />
+                <span className="text-ink-2">{t("status.pending")}</span>
               </span>
+              {command.events && command.events.length > 0 && (
+                <span className="max-w-56 truncate text-xs text-ink-3">
+                  {command.events.at(-1)!.message}
+                </span>
+              )}
+            </button>
+            {canOperate && (
+              <Button
+                variant="ghost"
+                className="!px-2 !py-1 !text-xs"
+                disabled={stopping}
+                title={t("action.stopHint")}
+                onClick={() => void stopCommand(command.id)}
+              >
+                {stopping ? <IconSpinner size={12} /> : <IconX size={12} />}
+                {t("action.stop")}
+              </Button>
             )}
-          </button>
+          </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-edge bg-surface px-2.5 py-0.5 text-xs font-medium text-ink-3">
             <IconSpinner size={13} />
@@ -281,15 +318,7 @@ export function ValveRow({
                   variant="ghost"
                   className="!px-3 !py-1.5 !text-xs"
                   disabled={stopping}
-                  onClick={async () => {
-                    setStopping(true);
-                    try {
-                      setModalCommand(await api.commands.cancel(modalCommand.id));
-                      onChanged();
-                    } finally {
-                      setStopping(false);
-                    }
-                  }}
+                  onClick={() => void stopCommand(modalCommand.id)}
                 >
                   {stopping ? <IconSpinner size={13} /> : <IconX size={13} />}
                   {t("action.stop")}

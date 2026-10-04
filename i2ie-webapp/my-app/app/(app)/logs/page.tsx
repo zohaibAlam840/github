@@ -11,6 +11,7 @@
  */
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { api } from "@/lib/api";
 import {
@@ -48,8 +49,23 @@ const STATUSES: CommandStatus[] = [
  */
 const PAGE_SIZE = 200;
 
+/**
+ * The one-line reason a command ended the way it did, or null when there
+ * is nothing worth saying.
+ *
+ * Deliberately silent for commands that simply worked: a reason on every
+ * row is noise, and noise is what buries the rows that matter. The text is
+ * the worker's last event — its own words about what actually happened,
+ * rather than a phrase this screen invents from a status code.
+ */
+function reasonFor(r: CommandLog): string | null {
+  if (r.status === "success" || r.status === "pending" || r.status === "sent") return null;
+  return r.events?.at(-1)?.message ?? null;
+}
+
 export default function LogsPage() {
   const { t, i18n } = useTranslation();
+  const router = useRouter();
   const [rows, setRows] = useState<CommandLog[]>([]);
   /*
    * The log opens on the last 30 days, not on everything.
@@ -160,7 +176,7 @@ export default function LogsPage() {
     const headers = [
       "id", "created_at", "building", "unit", "valve", "gateway", "sim_number",
       "action", "sms_text", "status", "sent_at", "reply", "reply_at",
-      "user", "retries",
+      "user", "retries", "reason",
     ];
     const escape = (v: string | number | null) => {
       const s = String(v ?? "");
@@ -170,7 +186,7 @@ export default function LogsPage() {
       [
         r.id, r.createdAt, r.buildingName, r.unitName, r.valveCode, r.gatewayLabel,
         r.simNumber, r.action, r.commandText, r.status, r.sentAt,
-        r.replyText, r.replyAt, r.userName, r.retries,
+        r.replyText, r.replyAt, r.userName, r.retries, reasonFor(r),
       ]
         .map(escape)
         .join(",")
@@ -248,16 +264,29 @@ export default function LogsPage() {
               <tbody className="divide-y divide-hairline">
                 {filtered.map((r) => {
                   const hasEvents = (r.events?.length ?? 0) > 0;
+                  const reason = reasonFor(r);
                   const expanded = expandedId === r.id;
                   return (
                     <Fragment key={r.id}>
                       <tr
-                        className={hasEvents ? "cursor-pointer" : undefined}
-                        onClick={() =>
-                          hasEvents && setExpandedId(expanded ? null : r.id)
-                        }
+                        /*
+                          Two different intents on one row, so they get two
+                          different targets: the chevron peeks at the trail
+                          without leaving the table, the row itself opens
+                          the command — where the full trail lives and where
+                          it can be sent again.
+                        */
+                        className="cursor-pointer hover:bg-hairline/20"
+                        onClick={() => router.push(`/logs/detail?id=${r.id}`)}
                       >
-                        <td className="px-2 py-2.5 text-ink-3">
+                        <td
+                          className="px-2 py-2.5 text-ink-3"
+                          onClick={(e) => {
+                            // Expanding is not navigating.
+                            e.stopPropagation();
+                            if (hasEvents) setExpandedId(expanded ? null : r.id);
+                          }}
+                        >
                           {hasEvents && (
                             <IconChevronDown
                               size={13}
@@ -297,6 +326,30 @@ export default function LogsPage() {
                         <td className="px-4 py-2.5 font-mono text-xs text-ink-3">{r.commandText}</td>
                         <td className="px-4 py-2.5">
                           <StatusChip status={r.status} />
+                          {/*
+                            WHY it ended that way, under the chip.
+
+                            "Failed" on its own is not error handling — it
+                            tells an operator that something went wrong and
+                            nothing about what to do next. The worker's own
+                            words ("SMS rejected (code 500)", "No reply from
+                            TRB within 7s", "Gateway unreachable — skipped")
+                            were already recorded, but only inside the
+                            expandable trail, so finding them meant opening
+                            rows one at a time.
+
+                            Under the chip rather than in a twelfth column:
+                            this table already scrolls sideways, and the
+                            reason belongs next to the verdict anyway.
+                          */}
+                          {reason && (
+                            <span
+                              className="mt-1 block max-w-56 truncate text-[11px] text-ink-3"
+                              title={reason}
+                            >
+                              {reason}
+                            </span>
+                            )}
                         </td>
                         {/*
                           Retries were already being collected and already

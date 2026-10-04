@@ -38,6 +38,7 @@ export function ValveLink({
     <Link
       href={`/buildings/valve?building=${buildingId}&unit=${unitId}&valve=${valveId}`}
       className={className}
+      onClick={(e) => e.stopPropagation()}
     >
       {valveCode}
     </Link>
@@ -55,7 +56,11 @@ export function BuildingLink({
 }) {
   if (buildingId === null) return <span className="text-ink-2">{buildingName}</span>;
   return (
-    <Link href={`/buildings/detail?id=${buildingId}`} className={className}>
+    <Link
+      href={`/buildings/detail?id=${buildingId}`}
+      className={className}
+      onClick={(e) => e.stopPropagation()}
+    >
       {buildingName}
     </Link>
   );
@@ -72,7 +77,11 @@ export function GatewayLink({
 }) {
   if (gatewayId === null) return <span className="text-ink-2">{gatewayLabel}</span>;
   return (
-    <Link href={`/gateways/detail?id=${gatewayId}`} className={className}>
+    <Link
+      href={`/gateways/detail?id=${gatewayId}`}
+      className={className}
+      onClick={(e) => e.stopPropagation()}
+    >
       {gatewayLabel}
     </Link>
   );

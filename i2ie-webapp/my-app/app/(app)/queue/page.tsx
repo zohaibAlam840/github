@@ -339,22 +339,22 @@ function BulkSendPanel() {
     void api.commands.list(200).then((recent) => {
       // Never clobber a batch started in this tab.
       if (batch.length > 0) return;
-      const inFlight = recent
+      const adopted = recent
         .filter((c) => c.status === "pending" || c.status === "sent")
         .reverse();
-      if (inFlight.length < 2) return;
+      if (adopted.length < 2) return;
 
-      setValveNames(new Map(inFlight.map((c) => [c.valveId, c.valveCode])));
+      setValveNames(new Map(adopted.map((c) => [c.valveId, c.valveCode])));
       setValveGateways(
         new Map(
-          inFlight.flatMap((c) =>
+          adopted.flatMap((c) =>
             c.gatewayLabel && c.gatewayLabel !== "—"
               ? [[c.valveId, c.gatewayLabel] as [number, string]]
               : []
           )
         )
       );
-      setBatch(inFlight);
+      setBatch(adopted);
       setRunning(true);
     });
     // Mount only: this is recovery, not a subscription. Once adopted, the

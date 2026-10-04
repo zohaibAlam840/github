@@ -168,7 +168,17 @@
     "sendAllHint": "One command to all {{count}} valves here — still one lane, one SMS at a time, exactly like a single command. Expect a few seconds per valve.",
     "sendAll": "Send to all {{count}}",
     "sendAllProgress": "{{done}} of {{total}} finished",
-    "sendAllStopped": "Stopped. Anything not yet sent was cancelled; messages already sent may still act."
+    "sendAllStopped": "Stopped. Anything not yet sent was cancelled; messages already sent may still act.",
+    "chooseValves": "Choose valves to send…",
+    "selectAll": "Select all",
+    "selectNone": "Clear",
+    "selectedCount": "{{count}} of {{total}} selected",
+    "searchValves": "Search valve code or TRB…",
+    "matchCount": "{{count}} match",
+    "sendSelected": "Send to {{count}} valves",
+    "selectMatches": "Select {{count}} matching",
+    "noValveMatches": "No valves match that search.",
+    "loadingMoreValves": "{{count}} more — scroll to load"
   },
   "queue": {
     "inFlight": "Processing now",
@@ -249,10 +259,19 @@
     "empty": "No log entries match the filters.",
     "count": "{{count}} entries",
     "retries": "Retries",
-    "retriesHint": "How many times the dispatch had to be re-sent to the worker before it was accepted. Repeated retries on one gateway usually mean a weak signal rather than a broken valve.",
+    "retriesHint": "How many times the dispatch had to be re-sent to the WORKER before it was accepted — not SMS resends. An SMS is never resent automatically: the network cannot recall one, so a second copy would switch the valve twice. A number here means the worker was briefly unreachable.",
     "problemsOnly": "Problems only",
     "showingOf": "Showing {{shown}} of {{total}}",
-    "loadMore": "Load {{count}} more"
+    "loadMore": "Load {{count}} more",
+    "reason": "Reason",
+    "notFound": "That command no longer exists.",
+    "backToLogs": "Back to logs",
+    "trail": "What happened",
+    "retryTitle": "Send this command again",
+    "retryHint": "Queues a NEW command with the same action, to the same valve. The original record above keeps its own outcome — history is never rewritten.",
+    "retryAction": "Send {{action}} again",
+    "valveGone": "This valve has been deleted, so there is nothing left to send to.",
+    "loading": "Loading…"
   },
   "settings": {
     "smsSection": "SMS command keywords",

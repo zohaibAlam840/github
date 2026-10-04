@@ -390,6 +390,39 @@ export function createRepo(db: DatabaseSync) {
     );
   }
 
+  /*
+   * The joined log row, in one place.
+   *
+   * The ids come back alongside the names because names alone are a dead
+   * end: they cannot drive a "filter by this TRB" control, and they cannot
+   * build a link from a log row to the valve it is about.
+   *
+   * Shared by the list and the single-row lookup so the two cannot drift
+   * into disagreeing about what a log row contains.
+   */
+  const COMMAND_LOG_SELECT = `SELECT c.*,
+            v.valve_code AS vc, v.unit_id AS uid,
+            u.name AS un, u.building_id AS bid,
+            b.name AS bn,
+            g.id AS gid, g.label AS gl, g.sim_number AS sn
+     FROM commands c
+     LEFT JOIN valves v ON v.id = c.valve_id
+     LEFT JOIN units u ON u.id = v.unit_id
+     LEFT JOIN buildings b ON b.id = u.building_id
+     LEFT JOIN gateways g ON g.id = v.gateway_id`;
+
+  const toCommandLog = (r: any): CommandLog => ({
+    ...rowToCommand(r),
+    valveCode: r.vc ?? "—",
+    unitName: r.un ?? "—",
+    buildingName: r.bn ?? "—",
+    simNumber: r.sn ?? "—",
+    gatewayLabel: r.gl ?? "—",
+    gatewayId: r.gid ?? null,
+    buildingId: r.bid ?? null,
+    unitId: r.uid ?? null,
+  });
+
   /**
    * One page of the command log, newest first.
    *
@@ -412,37 +445,18 @@ export function createRepo(db: DatabaseSync) {
     const since = opts.since ?? null;
     const rows = db
       .prepare(
-        /*
-         * The ids come back alongside the names because names alone are a
-         * dead end: they cannot drive a "filter by this TRB" control, and
-         * they cannot build a link from a log row to the valve it is about.
-         * The joins were already here, so this costs nothing.
-         */
-        `SELECT c.*,
-                v.valve_code AS vc, v.unit_id AS uid,
-                u.name AS un, u.building_id AS bid,
-                b.name AS bn,
-                g.id AS gid, g.label AS gl, g.sim_number AS sn
-         FROM commands c
-         LEFT JOIN valves v ON v.id = c.valve_id
-         LEFT JOIN units u ON u.id = v.unit_id
-         LEFT JOIN buildings b ON b.id = u.building_id
-         LEFT JOIN gateways g ON g.id = v.gateway_id
+        `${COMMAND_LOG_SELECT}
          WHERE (? IS NULL OR c.created_at >= ?)
          ORDER BY c.id DESC LIMIT ? OFFSET ?`
       )
       .all(since, since, limit, offset) as any[];
-    return rows.map((r) => ({
-      ...rowToCommand(r),
-      valveCode: r.vc ?? "—",
-      unitName: r.un ?? "—",
-      buildingName: r.bn ?? "—",
-      simNumber: r.sn ?? "—",
-      gatewayLabel: r.gl ?? "—",
-      gatewayId: r.gid ?? null,
-      buildingId: r.bid ?? null,
-      unitId: r.uid ?? null,
-    }));
+    return rows.map(toCommandLog);
+  }
+
+  /** The same joined row, for one command — the detail screen's source. */
+  function getCommandLog(id: number): CommandLog | null {
+    const r = db.prepare(`${COMMAND_LOG_SELECT} WHERE c.id = ?`).get(id) as any;
+    return r ? toCommandLog(r) : null;
   }
 
   /**
@@ -645,6 +659,7 @@ export function createRepo(db: DatabaseSync) {
     updateCommand,
     listCommandLogs,
     countCommandLogs,
+    getCommandLog,
     listStuckPending,
     listStuckSent,
     insertActivity,

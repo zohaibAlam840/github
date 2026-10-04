@@ -261,6 +261,8 @@ export const api = {
       if (opts.since) qs.set("since", opts.since);
       return get<CommandPage>(`/api/commands?${qs}`);
     },
+    /** GET /api/commands/:id — one joined row, for the detail screen. */
+    get: (id: number) => get<CommandLog>(`/api/commands/${id}`),
     /** POST /api/commands/:id/cancel — stop waiting; the SMS may already be gone. */
     cancel: (id: number) => post<Command>(`/api/commands/${id}/cancel`, {}),
   },

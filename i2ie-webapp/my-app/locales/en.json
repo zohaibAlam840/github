@@ -178,7 +178,8 @@
     "sendSelected": "Send to {{count}} valves",
     "selectMatches": "Select {{count}} matching",
     "noValveMatches": "No valves match that search.",
-    "loadingMoreValves": "{{count}} more — scroll to load"
+    "loadingMoreValves": "{{count}} more — scroll to load",
+    "pickAction": "Choose an action first"
   },
   "queue": {
     "inFlight": "Processing now",

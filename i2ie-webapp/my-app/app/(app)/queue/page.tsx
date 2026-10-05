@@ -270,7 +270,12 @@ function BulkSendPanel() {
   const { user } = useAuth();
   const [buildings, setBuildings] = useState<BuildingStats[]>([]);
   const [selected, setSelected] = useState<Set<number>>(new Set());
-  const [action, setAction] = useState<CommandAction>("off");
+  /*
+   * Nothing pre-chosen — and this one defaulted to OFF, so the panel
+   * opened primed to cut supply to whatever got ticked. Picking the action
+   * is part of the decision, not a default to be inherited.
+   */
+  const [action, setAction] = useState<CommandAction | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [sending, setSending] = useState(false);
   const [result, setResult] = useState<string | null>(null);
@@ -376,7 +381,7 @@ function BulkSendPanel() {
   const estimateLabel = formatDuration(estimateMs);
 
   async function send() {
-    if (!user || valveCount === 0) return;
+    if (!user || valveCount === 0 || action === null) return;
     const confirmed = confirm(
       t("queue.bulkConfirm", {
         count: valveCount,
@@ -422,6 +427,7 @@ function BulkSendPanel() {
           : t("queue.bulkQueued", { count: queuedCommands.length })
       );
       setSelected(new Set());
+      setAction(null);
     } finally {
       setSending(false);
     }
@@ -538,11 +544,11 @@ function BulkSendPanel() {
 
       <Button
         className="w-full"
-        disabled={valveCount === 0 || inFlight}
+        disabled={valveCount === 0 || action === null || inFlight}
         onClick={send}
       >
         {sending ? <IconSpinner size={14} /> : null}
-        {t("queue.bulkSendButton")}
+        {action === null ? t("buildings.pickAction") : t("queue.bulkSendButton")}
       </Button>
 
       {/* Only while there is still something queued to stop. */}

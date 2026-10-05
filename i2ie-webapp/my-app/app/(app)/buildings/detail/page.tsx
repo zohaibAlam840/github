@@ -305,7 +305,16 @@ function SendToBuildingCard({
   onSent: () => void;
 }) {
   const { t } = useTranslation();
-  const [action, setAction] = useState<CommandAction>("on");
+  /*
+   * No action is pre-chosen.
+   *
+   * A default meant the modal opened with one of ON / OFF / Check status
+   * already highlighted, so ticking some valves and hitting Send carried
+   * out an action nobody had actually picked — it was just whichever one
+   * happened to be the default. On a screen that cuts people's water the
+   * action has to be a decision, not a leftover.
+   */
+  const [action, setAction] = useState<CommandAction | null>(null);
   const [sending, setSending] = useState(false);
   /*
    * The whole Command objects, in send order — BulkSendProgress needs the
@@ -431,7 +440,7 @@ function SendToBuildingCard({
 
   async function send() {
     const ids = [...selected];
-    if (ids.length === 0) return;
+    if (ids.length === 0 || action === null) return;
     setSending(true);
     setNotice(null);
     try {
@@ -444,6 +453,7 @@ function SendToBuildingCard({
        * code.
        */
       setSelected(new Set());
+      setAction(null);
       setPicking(false);
       setBatch(commands);
       setRunning(commands.length > 0);
@@ -616,13 +626,15 @@ function SendToBuildingCard({
 
             <Button
               className="w-full"
-              disabled={selected.size === 0 || sending}
+              disabled={selected.size === 0 || action === null || sending}
               onClick={send}
             >
               {sending ? <IconSpinner size={13} /> : null}
               {/* "Send to all 0" was nonsense — it is a count of what is
                   ticked, not of the building. */}
-              {t("buildings.sendSelected", { count: selected.size })}
+              {action === null
+                ? t("buildings.pickAction")
+                : t("buildings.sendSelected", { count: selected.size })}
             </Button>
           </div>
         </Modal>

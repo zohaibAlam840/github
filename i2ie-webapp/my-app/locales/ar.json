@@ -178,7 +178,8 @@
     "sendSelected": "إرسال إلى {{count}} صمامات",
     "selectMatches": "تحديد {{count}} مطابقة",
     "noValveMatches": "لا توجد صمامات مطابقة لهذا البحث.",
-    "loadingMoreValves": "{{count}} أخرى — مرّر للتحميل"
+    "loadingMoreValves": "{{count}} أخرى — مرّر للتحميل",
+    "pickAction": "اختر إجراءً أولًا"
   },
   "queue": {
     "inFlight": "قيد المعالجة الآن",
